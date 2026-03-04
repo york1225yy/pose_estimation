@@ -1,0 +1,22 @@
+# 模型权重
+*.pt
+*.onnx
+*.engine
+*.pth
+
+# 推理输出（可选保留）
+# output/
+
+# Python 缓存
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# 环境
+.env
+venv/
+.venv/
+
+# Ultralytics 缓存
+runs/

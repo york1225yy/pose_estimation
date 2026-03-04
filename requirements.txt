@@ -1,0 +1,7 @@
+# 驾驶员坐姿估计 - 依赖清单
+ultralytics>=8.1.0
+opencv-python>=4.8.0
+numpy>=1.24.0
+onnx>=1.14.0
+onnxruntime>=1.16.0       # 可选，用于 ONNX 推理验证
+# onnxsim                # 可选，onnx-simplifier
