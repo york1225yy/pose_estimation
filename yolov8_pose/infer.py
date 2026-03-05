@@ -62,6 +62,13 @@ def parse_args():
                         help="不在画面上叠加参数面板")
     parser.add_argument("--save-csv", action="store_true", default=True,
                         help="保存参数 CSV（默认开启）")
+    parser.add_argument("--display-scale", type=float, default=1.0,
+                        help="预览窗口画面缩放比例，如 0.5 表示缩小一半 (默认: 1.0)；"
+                             "窗口边框也可直接用鼠标拖拽调整大小")
+    parser.add_argument("--person", type=str, default="largest",
+                        choices=["largest", "all"],
+                        help="目标人物选择：largest=bbox面积最大的人(默认，排除远处背景人员), "
+                             "all=处理所有检测到的人")
     return parser.parse_args()
 
 
@@ -87,7 +94,23 @@ def process_frame(frame: np.ndarray,
     keypoints_data = result.keypoints.data.cpu().numpy()   # (N, 17, 3)
     boxes = result.boxes
 
-    for pid in range(len(keypoints_data)):
+    # ── 目标人物选择 ──────────────────────────────────────────────
+    n_persons = len(keypoints_data)
+    if args.person == "largest" and boxes is not None and len(boxes) > 0:
+        best_area, target_idx = -1.0, 0
+        for i in range(min(n_persons, len(boxes))):
+            x1, y1, x2, y2 = boxes.xyxy[i].cpu().numpy()
+            area = (x2 - x1) * (y2 - y1)
+            if area > best_area:
+                best_area, target_idx = area, i
+        if frame_idx % 30 == 0:  # 每30帧打印一次，避免刷屏
+            print(f"[帧 {frame_idx:06d}] 共检测到 {n_persons} 人，"
+                  f"选择 bbox 面积最大的人 #{target_idx} ({best_area:.0f} px²)")
+        pid_list = [target_idx]
+    else:
+        pid_list = list(range(n_persons))
+
+    for pid in pid_list:
         kp_xyc = keypoints_data[pid]            # (17, 3) -> x, y, conf
         kp_xy = kp_xyc[:, :2]                   # (17, 2)
         kp_conf = kp_xyc[:, 2]                  # (17,)
@@ -143,7 +166,14 @@ def infer_image(image_path: str, model, classifier, visualizer, args,
 
     # 显示
     if not args.no_show:
-        cv2.imshow("YOLOv8-Pose", annotated)
+        if args.display_scale != 1.0:
+            dw = max(1, int(annotated.shape[1] * args.display_scale))
+            dh = max(1, int(annotated.shape[0] * args.display_scale))
+            disp = cv2.resize(annotated, (dw, dh), interpolation=cv2.INTER_AREA)
+        else:
+            disp = annotated
+        cv2.namedWindow("YOLOv8-Pose", cv2.WINDOW_NORMAL)  # 支持鼠标拖拽缩放
+        cv2.imshow("YOLOv8-Pose", disp)
         cv2.waitKey(0)
         cv2.destroyAllWindows()
 
@@ -190,6 +220,9 @@ def infer_video(video_path: str, model, classifier, visualizer, args,
 
     frame_idx = 0
     t_start = time.time()
+    WIN_NAME = "YOLOv8-Pose"
+    if not args.no_show:
+        cv2.namedWindow(WIN_NAME, cv2.WINDOW_NORMAL)  # 支持鼠标拖拽缩放
 
     while True:
         ret, frame = cap.read()
@@ -199,10 +232,16 @@ def infer_video(video_path: str, model, classifier, visualizer, args,
         annotated = process_frame(frame, model, classifier, visualizer, args,
                                   frame_idx=frame_idx, csv_writer=csv_writer,
                                   source_name=Path(video_path).name)
-        writer.write(annotated)
+        writer.write(annotated)  # 始终以原始分辨率写入输出文件
 
         if not args.no_show:
-            cv2.imshow("YOLOv8-Pose", annotated)
+            if args.display_scale != 1.0:
+                dw = max(1, int(annotated.shape[1] * args.display_scale))
+                dh = max(1, int(annotated.shape[0] * args.display_scale))
+                disp = cv2.resize(annotated, (dw, dh), interpolation=cv2.INTER_AREA)
+            else:
+                disp = annotated
+            cv2.imshow(WIN_NAME, disp)
             if cv2.waitKey(1) & 0xFF == ord("q"):
                 print("用户中断")
                 break

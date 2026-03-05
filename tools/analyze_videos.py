@@ -84,18 +84,22 @@ def extract_video(video_path: Path, model: YOLO, classifier: PostureClassifier,
 
         # 只取置信度最高的人
         best_params = None
-        best_score = -1.0
         for r in results:
             if r.keypoints is None or len(r.keypoints.xy) == 0:
                 continue
-            for i, (kps_xy, kps_conf) in enumerate(
-                    zip(r.keypoints.xy, r.keypoints.conf)):
-                kp = kps_xy.cpu().numpy()
-                cf = kps_conf.cpu().numpy()
-                mean_cf = float(np.mean(cf))
-                if mean_cf > best_score:
-                    best_score = mean_cf
-                    best_params = classifier.classify(kp, cf)
+            n = len(r.keypoints.xy)
+            # 选择 bbox 面积最大的人（距离镜头最近），排除背景人员
+            target_i = 0
+            if r.boxes is not None and len(r.boxes) > 0:
+                best_area = -1.0
+                for i in range(min(n, len(r.boxes))):
+                    x1, y1, x2, y2 = r.boxes.xyxy[i].cpu().numpy()
+                    area = (x2 - x1) * (y2 - y1)
+                    if area > best_area:
+                        best_area, target_i = area, i
+            kp = r.keypoints.xy[target_i].cpu().numpy()
+            cf = r.keypoints.conf[target_i].cpu().numpy()
+            best_params = classifier.classify(kp, cf)
 
         if best_params is None:
             frame_idx += 1
