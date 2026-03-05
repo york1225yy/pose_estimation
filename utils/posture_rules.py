@@ -222,34 +222,42 @@ class PostureClassifier:
             params.lateral_lean = 0.0
 
         # ══════════════════════════════════════════════════════
-        # 规则引擎 — 当前激活 4 类坐姿（优先级从高到低）
+        # 规则引擎（数据驱动，基于4段实测视频统计分析）
+        #
+        # 核心判别维度：
+        #   trunk_tilt（躯干偏垂直角）— 主判别特征
+        #     ≈ 0-12°  : 身体前倾/低头（贴近方向盘或手机）
+        #     ≈ 13-24° : 正常靠背驾驶姿态
+        #     ≈ 25-36° : 大幅后仰放松
+        #
+        #   head_forward_angle（颈轴与躯干轴夹角）— 次判别特征
+        #     Heavy Lean Fwd : 26-37°（median ≈ 32°）
+        #     Head Down Phone: 32-49°（median ≈ 43°）
+        #     分界阈值 ≈ 36°
         # ══════════════════════════════════════════════════════
 
-        # Rule 1: Head Down Phone
-        # 头前倾 > 25°，颈椎折痕明显
-        if (self._valid(conf, NOSE, L_SHOULDER, R_SHOULDER)
-                and params.head_forward_angle > 25):
-            params.posture_label = "Head Down Phone"
-            return params
-
-        # Rule 2: Recline Relax
-        # 肩胛骨贴合靠背（躯干未前倾，trunk_tilt < 12°），头后仰 10°~20°
-        if (self._valid(conf, L_SHOULDER, R_SHOULDER, L_HIP, R_HIP,
-                        L_EAR, R_EAR)
-                and params.trunk_tilt < 12
-                and 10 <= params.head_backward_angle <= 20):
+        # Rule 1: Recline Relax
+        # 躯干大角度后仰（实测 Recline 全部 > 26.9°；Normal 最大 22.2°）
+        if (self._valid(conf, L_SHOULDER, R_SHOULDER, L_HIP, R_HIP)
+                and params.trunk_tilt > 24.0):
             params.posture_label = "Recline Relax"
             return params
 
-        # Rule 3: Heavy Lean Fwd
-        # 背部离开靠背（躯干前倾 > 15°，对应约 8 cm 间隙），不后仰
+        # Rule 2 & 3: 躯干贴合/超过垂直（前倾姿态区）
+        # 实测 Heavy Lean + Head Down Phone 均 trunk_tilt < 12.4°
+        # 用 head_forward_angle 进一步区分：
+        #   > 35° → 低头，颈—躯干折角显著 → Head Down Phone
+        #   ≤ 35° → 整体前倾，颈—躯干基本对齐 → Heavy Lean Fwd
         if (self._valid(conf, L_SHOULDER, R_SHOULDER, L_HIP, R_HIP)
-                and not params.trunk_backward
-                and params.trunk_tilt > 15):
-            params.posture_label = "Heavy Lean Fwd"
+                and params.trunk_tilt < 13.0):
+            if (self._valid(conf, NOSE, L_SHOULDER, R_SHOULDER)
+                    and params.head_forward_angle > 35.0):
+                params.posture_label = "Head Down Phone"
+            else:
+                params.posture_label = "Heavy Lean Fwd"
             return params
 
         # Rule 4 (default): Normal Driving
-        # 背部贴合靠背，头—颈—肩—髋基本一条直线
+        # trunk_tilt ≈ 13-24°，靠背正常，头颈基本对齐
         params.posture_label = "Normal Driving"
         return params

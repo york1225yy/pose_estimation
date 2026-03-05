@@ -17,6 +17,8 @@
   python label_images.py --source /path/to/images --out /path/to/output
 """
 
+from __future__ import annotations
+
 import argparse
 import os
 import shutil
