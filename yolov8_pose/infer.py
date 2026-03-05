@@ -251,7 +251,7 @@ def main():
             "帧序号", "人序号", "来源",
             "躯干前倾角(度)", "躯干后仰", "头前倾角(度)", "头侧倾角(度)",
             "躯干旋转角(度)", "肩膀抬起量(归一化)", "手臂抬起",
-            "头后仰角(度)", "侧向倾斜量", "判定坐姿",
+            "头后仰角(度)", "侧向倾斜量", "Posture",
         ]
         csv_writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
         csv_writer.writeheader()

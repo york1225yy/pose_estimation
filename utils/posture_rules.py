@@ -41,9 +41,9 @@ KEYPOINT_NAMES = [
 
 # 10 种坐姿标签
 POSTURE_LABELS = [
-    "标准驾驶坐姿", "轻微前倾", "严重前倾", "后仰放松",
-    "侧身取物", "半躺休息", "低头玩手机", "睡姿",
-    "斜躺副驾", "直立办公",
+    "Normal Driving", "Slight Lean Fwd", "Heavy Lean Fwd", "Recline Relax",
+    "Side Reach", "Semi-Reclined", "Head Down Phone", "Sleeping",
+    "Lateral Recline", "Upright Working",
 ]
 
 # 参考向量（图像坐标系 Y 轴向下）
@@ -75,7 +75,7 @@ class PostureParams:
     r_arm_up: bool = False           # 右臂抬起
     head_backward_angle: float = 0.0 # 头后仰角（度）
     lateral_lean: float = 0.0        # 侧向倾斜量
-    posture_label: str = "未知"      # 最终判定的坐姿
+    posture_label: str = "Unknown"    # final posture label
     confidence_valid: Dict[str, bool] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
@@ -89,7 +89,7 @@ class PostureParams:
             "手臂抬起": self.arm_raised,
             "头后仰角(度)": round(self.head_backward_angle, 2),
             "侧向倾斜量": round(self.lateral_lean, 3),
-            "判定坐姿": self.posture_label,
+            "Posture": self.posture_label,
         }
         return d
 
@@ -104,7 +104,7 @@ class PostureParams:
             f"  手臂抬起:   {'是' if self.arm_raised else '否'} (左:{self.l_arm_up} 右:{self.r_arm_up})",
             f"  侧向倾斜:   {self.lateral_lean:.3f}",
             f"  ──────────────────────────",
-            f"  判定坐姿:   【{self.posture_label}】",
+            f"  Posture:         [{self.posture_label}]",
         ]
         return "\n".join(lines)
 
@@ -224,9 +224,9 @@ class PostureClassifier:
         # 规则引擎（优先级从高到低）
         # ══════════════════════════════════════════════════════
 
-        # 规则 1：睡姿 — 头大幅度侧倾 > 35°
+        # Rule 1: Sleeping — large head side tilt > 35°
         if self._valid(conf, L_EAR, R_EAR) and params.head_side_angle > 35:
-            params.posture_label = "睡姿"
+            params.posture_label = "Sleeping"
             return params
 
         # 规则 2：半躺休息 / 斜躺副驾 — 靠背 ≥ 120° 或躯干后仰 > 35°
@@ -234,46 +234,46 @@ class PostureClassifier:
                     (params.trunk_backward and params.trunk_tilt > 35))
         if reclined and self._valid(conf, L_SHOULDER, R_SHOULDER, L_HIP, R_HIP):
             if params.lateral_lean > 0.15:
-                params.posture_label = "斜躺副驾"
+                params.posture_label = "Lateral Recline"
             else:
-                params.posture_label = "半躺休息"
+                params.posture_label = "Semi-Reclined"
             return params
 
         # 规则 3：侧身取物 — 躯干旋转 > 15° 且单侧肩膀抬高 > 20%
         if (self._valid(conf, L_SHOULDER, R_SHOULDER)
                 and params.trunk_rotate_angle > 15
                 and params.shoulder_lift_norm > 0.20):
-            params.posture_label = "侧身取物"
+            params.posture_label = "Side Reach"
             return params
 
         # 规则 4：低头玩手机 — 头前倾 > 25°
         if self._valid(conf, NOSE, L_SHOULDER, R_SHOULDER) and params.head_forward_angle > 25:
-            params.posture_label = "低头玩手机"
+            params.posture_label = "Head Down Phone"
             return params
 
         # 规则 5：严重前倾 — 躯干前倾 > 20°
         if (self._valid(conf, L_SHOULDER, R_SHOULDER, L_HIP, R_HIP)
                 and not params.trunk_backward and params.trunk_tilt > 20):
-            params.posture_label = "严重前倾"
+            params.posture_label = "Heavy Lean Fwd"
             return params
 
         # 规则 6：轻微前倾 — 躯干前倾 8°~20°
         if (self._valid(conf, L_SHOULDER, R_SHOULDER, L_HIP, R_HIP)
                 and not params.trunk_backward and 8 < params.trunk_tilt <= 20):
-            params.posture_label = "轻微前倾"
+            params.posture_label = "Slight Lean Fwd"
             return params
 
         # 规则 7：直立办公 — 背挺直（< 5°）且手臂抬起
         if params.trunk_tilt < 5 and params.arm_raised:
-            params.posture_label = "直立办公"
+            params.posture_label = "Upright Working"
             return params
 
         # 规则 8：后仰放松 — 头后仰 10°~25°，躯干直立 < 8°
         if self._valid(conf, NOSE, L_EAR, R_EAR, L_SHOULDER, R_SHOULDER):
             if 10 <= params.head_backward_angle <= 25 and params.trunk_tilt < 8:
-                params.posture_label = "后仰放松"
+                params.posture_label = "Recline Relax"
                 return params
 
-        # 规则 9（默认）：标准驾驶坐姿
-        params.posture_label = "标准驾驶坐姿"
+        # Rule 9 (default): Normal Driving
+        params.posture_label = "Normal Driving"
         return params

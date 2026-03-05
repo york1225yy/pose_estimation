@@ -55,19 +55,19 @@ LIMB_COLORS = {
     (L_KNEE, L_ANKLE): (255, 0, 80), (R_KNEE, R_ANKLE): (255, 0, 80),
 }
 
-# 坐姿 → 边框/文字颜色
+# Posture → bounding box / text color
 POSTURE_COLOR_MAP = {
-    "标准驾驶坐姿": (0, 255, 0),    # 绿
-    "轻微前倾":     (0, 220, 255),  # 黄
-    "严重前倾":     (0, 128, 255),  # 橙
-    "后仰放松":     (255, 255, 0),  # 青
-    "侧身取物":     (255, 128, 0),  # 浅蓝
-    "半躺休息":     (0, 0, 255),    # 红
-    "低头玩手机":   (0, 80, 255),   # 橙红
-    "睡姿":         (0, 0, 200),    # 深红
-    "斜躺副驾":     (128, 0, 255),  # 紫
-    "直立办公":     (255, 200, 100),# 浅蓝绿
-    "未知":         (180, 180, 180),
+    "Normal Driving":  (0, 255, 0),     # green
+    "Slight Lean Fwd": (0, 220, 255),   # yellow
+    "Heavy Lean Fwd":  (0, 128, 255),   # orange
+    "Recline Relax":   (255, 255, 0),   # cyan
+    "Side Reach":      (255, 128, 0),   # light blue
+    "Semi-Reclined":   (0, 0, 255),     # red
+    "Head Down Phone": (0, 80, 255),    # orange-red
+    "Sleeping":        (0, 0, 200),     # dark red
+    "Lateral Recline": (128, 0, 255),   # purple
+    "Upright Working": (255, 200, 100), # teal
+    "Unknown":         (180, 180, 180),
 }
 
 
@@ -168,13 +168,13 @@ class PoseVisualizer:
             return frame
 
         lines = [
-            f"[P{person_idx}] 坐姿: {params.posture_label}",
-            f"躯干前倾角: {params.trunk_tilt:.1f} deg ({'后仰' if params.trunk_backward else '前倾'})",
-            f"头前倾角: {params.head_forward_angle:.1f} deg",
-            f"头侧倾角: {params.head_side_angle:.1f} deg",
-            f"躯干旋转角: {params.trunk_rotate_angle:.1f} deg",
-            f"肩膀抬起量: {params.shoulder_lift_norm:.3f}",
-            f"手臂抬起: {'Yes' if params.arm_raised else 'No'}",
+            f"[P{person_idx}] Posture: {params.posture_label}",
+            f"Trunk Tilt: {params.trunk_tilt:.1f} deg ({'Backward' if params.trunk_backward else 'Forward'})",
+            f"Head Fwd:   {params.head_forward_angle:.1f} deg",
+            f"Head Side:  {params.head_side_angle:.1f} deg",
+            f"Trunk Rot:  {params.trunk_rotate_angle:.1f} deg",
+            f"Shldr Lift: {params.shoulder_lift_norm:.3f}",
+            f"Arm Raised: {'Yes' if params.arm_raised else 'No'}",
         ]
 
         font = cv2.FONT_HERSHEY_SIMPLEX
