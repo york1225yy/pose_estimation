@@ -107,20 +107,25 @@ class PoseVisualizer:
         kp = keypoints.astype(int)
         conf = confidences
 
+        # 按图像高度自适应：以 480px 为基准
+        scale = frame.shape[0] / 480.0
+        radius = max(3, int(self.kp_radius * scale))
+        thick  = max(1, int(self.limb_thick * scale))
+
         # 绘制骨骼线
         for (i, j) in SKELETON:
             if conf[i] > self.conf_thr and conf[j] > self.conf_thr:
                 color = LIMB_COLORS.get((i, j), (200, 200, 200))
                 cv2.line(frame, tuple(kp[i]), tuple(kp[j]),
-                         color, self.limb_thick, cv2.LINE_AA)
+                         color, thick, cv2.LINE_AA)
 
         # 绘制关键点
         for i in range(17):
             if conf[i] > self.conf_thr:
                 color = KP_COLORS.get(i, (255, 255, 255))
-                cv2.circle(frame, tuple(kp[i]), self.kp_radius,
+                cv2.circle(frame, tuple(kp[i]), radius,
                            color, -1, cv2.LINE_AA)
-                cv2.circle(frame, tuple(kp[i]), self.kp_radius,
+                cv2.circle(frame, tuple(kp[i]), radius,
                            (0, 0, 0), 1, cv2.LINE_AA)
 
         return frame
@@ -143,20 +148,25 @@ class PoseVisualizer:
         color = POSTURE_COLOR_MAP.get(label, (180, 180, 180))
         font = cv2.FONT_HERSHEY_SIMPLEX
 
+        # 按图像高度自适应字体
+        scale = frame.shape[0] / 480.0
+        fs = self.font_scale * scale
+        thick = max(1, int(2 * scale))
+
         if bbox is not None:
             x1, y1, x2, y2 = [int(v) for v in bbox]
             # 绘制检测框
-            cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+            cv2.rectangle(frame, (x1, y1), (x2, y2), color, max(1, int(2 * scale)))
             # 文字背景
             txt = f"P{person_idx}: {label}"
-            (tw, th), _ = cv2.getTextSize(txt, font, self.font_scale, 2)
+            (tw, th), _ = cv2.getTextSize(txt, font, fs, thick)
             cv2.rectangle(frame, (x1, y1 - th - 10), (x1 + tw + 6, y1), color, -1)
             cv2.putText(frame, txt, (x1 + 3, y1 - 5),
-                        font, self.font_scale, (255, 255, 255), 2, cv2.LINE_AA)
+                        font, fs, (255, 255, 255), thick, cv2.LINE_AA)
         else:
             txt = f"P{person_idx}: {label}"
-            cv2.putText(frame, txt, (10, 30 + person_idx * 30),
-                        font, self.font_scale, color, 2, cv2.LINE_AA)
+            cv2.putText(frame, txt, (10, 30 + person_idx * int(35 * scale)),
+                        font, fs, color, thick, cv2.LINE_AA)
 
         return frame
 
@@ -179,10 +189,13 @@ class PoseVisualizer:
         ]
 
         font = cv2.FONT_HERSHEY_SIMPLEX
-        fs = self.font_scale * 0.85
-        line_h = 22
-        pad = 8
-        y_start = 10 + person_idx * (len(lines) * line_h + 2 * pad + 10)
+
+        # 按图像高度自适应
+        scale  = frame.shape[0] / 480.0
+        fs     = self.font_scale * 0.85 * scale
+        line_h = max(18, int(26 * scale))
+        pad    = max(6,  int(10 * scale))
+        y_start = pad + person_idx * (len(lines) * line_h + 2 * pad + pad)
 
         # 计算面板宽度
         max_w = 0
