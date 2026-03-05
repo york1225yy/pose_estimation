@@ -39,11 +39,12 @@ KEYPOINT_NAMES = [
     "左髋", "右髋", "左膝", "右膝", "左踝", "右踝",
 ]
 
-# 10 种坐姿标签
+# 当前激活的 4 类坐姿标签
 POSTURE_LABELS = [
-    "Normal Driving", "Slight Lean Fwd", "Heavy Lean Fwd", "Recline Relax",
-    "Side Reach", "Semi-Reclined", "Head Down Phone", "Sleeping",
-    "Lateral Recline", "Upright Working",
+    "Normal Driving",   # 标准驾驶坐姿
+    "Heavy Lean Fwd",   # 严重前倾
+    "Recline Relax",    # 后仰放松
+    "Head Down Phone",  # 低头玩手机
 ]
 
 # 参考向量（图像坐标系 Y 轴向下）
@@ -221,59 +222,34 @@ class PostureClassifier:
             params.lateral_lean = 0.0
 
         # ══════════════════════════════════════════════════════
-        # 规则引擎（优先级从高到低）
+        # 规则引擎 — 当前激活 4 类坐姿（优先级从高到低）
         # ══════════════════════════════════════════════════════
 
-        # Rule 1: Sleeping — large head side tilt > 35°
-        if self._valid(conf, L_EAR, R_EAR) and params.head_side_angle > 35:
-            params.posture_label = "Sleeping"
-            return params
-
-        # 规则 2：半躺休息 / 斜躺副驾 — 靠背 ≥ 120° 或躯干后仰 > 35°
-        reclined = ((sba is not None and sba >= 120) or
-                    (params.trunk_backward and params.trunk_tilt > 35))
-        if reclined and self._valid(conf, L_SHOULDER, R_SHOULDER, L_HIP, R_HIP):
-            if params.lateral_lean > 0.15:
-                params.posture_label = "Lateral Recline"
-            else:
-                params.posture_label = "Semi-Reclined"
-            return params
-
-        # 规则 3：侧身取物 — 躯干旋转 > 15° 且单侧肩膀抬高 > 20%
-        if (self._valid(conf, L_SHOULDER, R_SHOULDER)
-                and params.trunk_rotate_angle > 15
-                and params.shoulder_lift_norm > 0.20):
-            params.posture_label = "Side Reach"
-            return params
-
-        # 规则 4：低头玩手机 — 头前倾 > 25°
-        if self._valid(conf, NOSE, L_SHOULDER, R_SHOULDER) and params.head_forward_angle > 25:
+        # Rule 1: Head Down Phone
+        # 头前倾 > 25°，颈椎折痕明显
+        if (self._valid(conf, NOSE, L_SHOULDER, R_SHOULDER)
+                and params.head_forward_angle > 25):
             params.posture_label = "Head Down Phone"
             return params
 
-        # 规则 5：严重前倾 — 躯干前倾 > 20°
+        # Rule 2: Recline Relax
+        # 肩胛骨贴合靠背（躯干未前倾，trunk_tilt < 12°），头后仰 10°~20°
+        if (self._valid(conf, L_SHOULDER, R_SHOULDER, L_HIP, R_HIP,
+                        L_EAR, R_EAR)
+                and params.trunk_tilt < 12
+                and 10 <= params.head_backward_angle <= 20):
+            params.posture_label = "Recline Relax"
+            return params
+
+        # Rule 3: Heavy Lean Fwd
+        # 背部离开靠背（躯干前倾 > 15°，对应约 8 cm 间隙），不后仰
         if (self._valid(conf, L_SHOULDER, R_SHOULDER, L_HIP, R_HIP)
-                and not params.trunk_backward and params.trunk_tilt > 20):
+                and not params.trunk_backward
+                and params.trunk_tilt > 15):
             params.posture_label = "Heavy Lean Fwd"
             return params
 
-        # 规则 6：轻微前倾 — 躯干前倾 8°~20°
-        if (self._valid(conf, L_SHOULDER, R_SHOULDER, L_HIP, R_HIP)
-                and not params.trunk_backward and 8 < params.trunk_tilt <= 20):
-            params.posture_label = "Slight Lean Fwd"
-            return params
-
-        # 规则 7：直立办公 — 背挺直（< 5°）且手臂抬起
-        if params.trunk_tilt < 5 and params.arm_raised:
-            params.posture_label = "Upright Working"
-            return params
-
-        # 规则 8：后仰放松 — 头后仰 10°~25°，躯干直立 < 8°
-        if self._valid(conf, NOSE, L_EAR, R_EAR, L_SHOULDER, R_SHOULDER):
-            if 10 <= params.head_backward_angle <= 25 and params.trunk_tilt < 8:
-                params.posture_label = "Recline Relax"
-                return params
-
-        # Rule 9 (default): Normal Driving
+        # Rule 4 (default): Normal Driving
+        # 背部贴合靠背，头—颈—肩—髋基本一条直线
         params.posture_label = "Normal Driving"
         return params
