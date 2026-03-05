@@ -167,14 +167,16 @@ class PoseVisualizer:
         if not self.show_params:
             return frame
 
+        # 只显示当前 4 类坐姿的关键判别参数：
+        #   Heavy Lean Fwd  → Trunk Tilt > 15°
+        #   Head Down Phone → Head Fwd   > 25°
+        #   Recline Relax   → Head Back  10°~20° + Trunk Tilt < 12°
+        #   Normal Driving  → 默认
         lines = [
             f"[P{person_idx}] Posture: {params.posture_label}",
-            f"Trunk Tilt: {params.trunk_tilt:.1f} deg ({'Backward' if params.trunk_backward else 'Forward'})",
-            f"Head Fwd:   {params.head_forward_angle:.1f} deg",
-            f"Head Side:  {params.head_side_angle:.1f} deg",
-            f"Trunk Rot:  {params.trunk_rotate_angle:.1f} deg",
-            f"Shldr Lift: {params.shoulder_lift_norm:.3f}",
-            f"Arm Raised: {'Yes' if params.arm_raised else 'No'}",
+            f"Trunk Tilt: {params.trunk_tilt:.1f} deg ({'Bwd' if params.trunk_backward else 'Fwd'})",
+            f"Head Fwd:   {params.head_forward_angle:.1f} deg  (>25 -> Phone)",
+            f"Head Back:  {params.head_backward_angle:.1f} deg  (10~20 -> Recline)",
         ]
 
         font = cv2.FONT_HERSHEY_SIMPLEX
