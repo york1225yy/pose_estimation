@@ -190,11 +190,21 @@ class PoseVisualizer:
 
         font = cv2.FONT_HERSHEY_SIMPLEX
 
-        # 按图像高度自适应
-        scale  = frame.shape[0] / 480.0
-        fs     = self.font_scale * 0.85 * scale
-        line_h = max(18, int(26 * scale))
-        pad    = max(6,  int(10 * scale))
+        # 按图像高度自适应（基准 480px）
+        h_scale = frame.shape[0] / 480.0
+        fs_candidate = self.font_scale * 0.85 * h_scale
+
+        # 额外的宽度约束：保证最长行能放进画面（留 20px 边距）
+        avail_w = frame.shape[1] - 20
+        fs = fs_candidate
+        for ln in lines:
+            (tw, _), _ = cv2.getTextSize(ln, font, fs_candidate, 1)
+            if tw > avail_w and tw > 0:
+                fs = min(fs, fs_candidate * avail_w / tw)
+        fs = max(0.3, fs)  # 字体不低于 0.3，保证基本可读
+
+        line_h = max(18, int(26 * h_scale * (fs / fs_candidate if fs_candidate > 0 else 1)))
+        pad    = max(6,  int(10 * h_scale))
         y_start = pad + person_idx * (len(lines) * line_h + 2 * pad + pad)
 
         # 计算面板宽度
