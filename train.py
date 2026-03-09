@@ -25,7 +25,7 @@ from stgcn.dataset import PoseDataset, ACTIVITY_LABELS, NUM_CLASSES
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 LABEL_DIR = os.path.join(BASE_DIR, 'activity_label')
-POSE_DIR = os.path.join(BASE_DIR, 'pose_vp1')
+POSE_DIR = os.path.join(BASE_DIR, 'pose_all')
 OUTPUT_DIR = os.path.join(BASE_DIR, 'output')
 
 

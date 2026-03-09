@@ -9,11 +9,6 @@ from torch.utils.data import Dataset
 from .graph import JOINT_NAMES
 
 
-# Mapping from CSV column joint names to our ordered joint list index
-# CSV has: nose, lElbow, lWrist, rHeel, rHip, rSmallToe, neck, lSmallToe,
-#          rWrist, rAnkle, lHip, lHeel, lKnee, lEye, midHip, background,
-#          lEar, rElbow, rShoulder, rKnee, lShoulder, lBigToe, rEye, rEar, rBigToe, lAnkle
-
 # Activity label mapping
 ACTIVITY_LABELS = [
     'fasten_seat_belt', 'hand_over', 'work', 'eat_drink',
@@ -24,11 +19,30 @@ ACTIVITY_LABELS = [
 ACTIVITY_TO_IDX = {name: idx for idx, name in enumerate(ACTIVITY_LABELS)}
 NUM_CLASSES = len(ACTIVITY_LABELS)
 
-# Map from file_id in labels to actual CSV filename in pose_vp1/
-FILE_ID_TO_POSE = {
-    'vp1/run1b_2018-05-29-14-02-47.ids_1': 'run1b_2018-05-29-14-02-47.ids_1.openpose.3d.csv',
-    'vp1/run2_2018-05-29-14-33-44.ids_1': 'run2_2018-05-29-14-33-44.ids_1.openpose.3d.csv',
-}
+
+def _build_file_id_mapping(pose_dir, file_ids):
+    """
+    Dynamically build {file_id: csv_path} for all available pose CSVs.
+
+    Each pose CSV is named like:  run1_2018-05-03-14-08-31.ids_1.openpose.3d.csv
+    Each label file_id is like:   vp2/run1_2018-05-03-14-08-31.ids_1
+
+    The match is: file_id ends with '/' + csv_stem  (csv_stem strips '.openpose.3d.csv')
+    """
+    mapping = {}
+    suffix = '.openpose.3d.csv'
+    available = {
+        fname[:-len(suffix)]: os.path.join(pose_dir, fname)
+        for fname in os.listdir(pose_dir)
+        if fname.endswith(suffix)
+    }  # {stem: full_path}
+
+    for fid in file_ids:
+        # fid example: "vp2/run1_2018-05-03-14-08-31.ids_1"
+        base = fid.split('/', 1)[-1]  # strip vpX/ prefix
+        if base in available:
+            mapping[fid] = available[base]
+    return mapping
 
 
 class PoseDataset(Dataset):
@@ -44,7 +58,7 @@ class PoseDataset(Dataset):
         """
         Args:
             label_csv: path to activity label CSV (e.g., split_0.train.csv)
-            pose_dir: path to pose_vp1/ directory
+            pose_dir: path to directory containing openpose .3d.csv files
             max_frames: temporal window size (pad/crop to this length)
             augment: whether to apply data augmentation
         """
@@ -52,18 +66,30 @@ class PoseDataset(Dataset):
         self.max_frames = max_frames
         self.augment = augment
 
-        # Load labels, filter to vp1 only
+        # Load all labels, then keep only rows whose pose CSV is available
         labels_df = pd.read_csv(label_csv)
-        labels_df = labels_df[labels_df['file_id'].str.startswith('vp1/')]
-        self.samples = labels_df.reset_index(drop=True)
+        all_file_ids = labels_df['file_id'].unique().tolist()
+        file_id_map = _build_file_id_mapping(pose_dir, all_file_ids)
 
-        # Pre-load all pose data into memory (keyed by file_id)
+        labels_df = labels_df[labels_df['file_id'].isin(file_id_map)].reset_index(drop=True)
+        self.samples = labels_df
+
+        # Pre-load all available pose CSVs into memory (keyed by file_id)
         self.pose_data = {}
-        for file_id, csv_name in FILE_ID_TO_POSE.items():
-            csv_path = os.path.join(pose_dir, csv_name)
-            if os.path.exists(csv_path):
-                df = pd.read_csv(csv_path)
-                self.pose_data[file_id] = df
+        for file_id, csv_path in file_id_map.items():
+            df = pd.read_csv(csv_path)
+            self.pose_data[file_id] = df
+
+        if not self.pose_data:
+            raise RuntimeError(
+                f"No matching pose CSVs found in '{pose_dir}' for the given label file. "
+                "Check that pose_dir contains *.openpose.3d.csv files."
+            )
+
+        available_ids = set(self.pose_data.keys())
+        matched = labels_df['file_id'].isin(available_ids).sum()
+        print(f"Pose data: {len(self.pose_data)} CSV file(s) loaded, "
+              f"{matched} label rows matched ({len(self.samples)} samples total)")
 
         # Build column mapping: for each joint, find x, y, z column indices
         sample_df = next(iter(self.pose_data.values()))
