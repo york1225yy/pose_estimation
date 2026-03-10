@@ -32,7 +32,7 @@ from sklearn.metrics import (
 )
 
 from stgcn.model import STGCN
-from stgcn.dataset import PoseDataset, ACTIVITY_LABELS, NUM_CLASSES
+from stgcn.dataset import PoseDataset
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 LABEL_DIR = os.path.join(BASE_DIR, 'activity_label')
@@ -56,6 +56,8 @@ def parse_args():
     parser.add_argument('--label_csv', type=str,
                         default=os.path.join(LABEL_DIR, 'tasklevel.chunks_90.csv'),
                         help='Full label CSV path')
+    parser.add_argument('--classes', type=str, nargs='+', default=None,
+                        help='Subset of class names to evaluate (must match training classes)')
     parser.add_argument('--max_frames', type=int, default=90)
     parser.add_argument('--graph_strategy', type=str, default='spatial',
                         choices=['uniform', 'distance', 'spatial'])
@@ -77,6 +79,7 @@ def build_splits(args):
     full_dataset = PoseDataset(
         args.label_csv, args.pose_dir,
         max_frames=args.max_frames, augment=False,
+        allowed_classes=args.classes,
     )
     n_total = len(full_dataset)
     n_train = int(0.7 * n_total)
@@ -89,7 +92,7 @@ def build_splits(args):
         generator=torch.Generator().manual_seed(args.seed),
     )
     print(f"Dataset: {n_total} samples  →  train={n_train}, val={n_val}, test={n_test}")
-    return {'train': train_set, 'val': val_set, 'test': test_set}
+    return {'train': train_set, 'val': val_set, 'test': test_set}, full_dataset.activity_labels, full_dataset.num_classes
 
 
 def make_loader(dataset, args, device):
@@ -157,7 +160,8 @@ def compute_metrics(labels, preds, probs):
     return metrics
 
 
-def print_results(split_name, metrics, labels, preds):
+def print_results(split_name, metrics, labels, preds, activity_labels):
+    num_classes = len(activity_labels)
     sep = '=' * 70
     print(f"\n{sep}")
     print(f"  Split: {split_name.upper()}   |   Samples: {len(labels)}")
@@ -180,11 +184,11 @@ def print_results(split_name, metrics, labels, preds):
     print(f"  {'-'*35}")
     for i, f1 in enumerate(metrics['f1_per_class']):
         marker = '  <<' if f1 == min(metrics['f1_per_class']) else ''
-        print(f"  {ACTIVITY_LABELS[i]:<26}  {f1:.4f}{marker}")
+        print(f"  {activity_labels[i]:<26}  {f1:.4f}{marker}")
 
     # Classification report
     present = sorted(set(labels))
-    target_names = [ACTIVITY_LABELS[i] for i in present]
+    target_names = [activity_labels[i] for i in present]
     report = classification_report(
         labels, preds,
         labels=present,
@@ -197,8 +201,8 @@ def print_results(split_name, metrics, labels, preds):
         print(f"  {line}")
 
     # Confusion matrix
-    cm = confusion_matrix(labels, preds, labels=list(range(NUM_CLASSES)))
-    short = [n[:8] for n in ACTIVITY_LABELS]
+    cm = confusion_matrix(labels, preds, labels=list(range(num_classes)))
+    short = [n[:8] for n in activity_labels]
     print(f"\n  Confusion Matrix (rows=true, cols=pred):\n")
     header = "           " + "".join(f"{n:>10s}" for n in short)
     print(f"  {header}")
@@ -228,7 +232,7 @@ def main():
         raise FileNotFoundError(f"Checkpoint not found: {model_path}")
 
     model = STGCN(
-        num_classes=NUM_CLASSES,
+        num_classes=num_classes,
         in_channels=3,
         graph_strategy=args.graph_strategy,
     ).to(device)
@@ -239,7 +243,7 @@ def main():
     print(f"Params : {sum(p.numel() for p in model.parameters()):,}")
 
     # Data splits
-    splits = build_splits(args)
+    splits, activity_labels, num_classes = build_splits(args)
 
     # Which splits to evaluate
     eval_splits = ['train', 'val', 'test'] if args.split == 'all' else [args.split]
@@ -249,7 +253,7 @@ def main():
         loader = make_loader(splits[split_name], args, device)
         labels, preds, probs = run_inference(model, loader, device)
         metrics = compute_metrics(labels, preds, probs)
-        print_results(split_name, metrics, labels, preds)
+        print_results(split_name, metrics, labels, preds, activity_labels)
         all_results[split_name] = metrics
 
     # Optionally save

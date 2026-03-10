@@ -21,16 +21,20 @@ from sklearn.metrics import (
 )
 
 from stgcn.model import STGCN
-from stgcn.dataset import PoseDataset, ACTIVITY_LABELS, NUM_CLASSES
+from stgcn.dataset import PoseDataset
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-LABEL_DIR = os.path.join(BASE_DIR, 'activity_label')
 POSE_DIR = os.path.join(BASE_DIR, 'pose_all')
 OUTPUT_DIR = os.path.join(BASE_DIR, 'output')
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description='ST-GCN Skeleton Action Recognition')
+    parser.add_argument('--label_csv', type=str,
+                        default=os.path.join(BASE_DIR, 'activity_label', 'tasklevel.chunks_90.csv'),
+                        help='Path to activity label CSV file')
+    parser.add_argument('--classes', type=str, nargs='+', default=None,
+                        help='Subset of class names to train on (default: all classes in label file)')
     parser.add_argument('--split', type=int, default=0, choices=[0, 1, 2],
                         help='Data split index (default: 0)')
     parser.add_argument('--epochs', type=int, default=80,
@@ -63,17 +67,18 @@ def build_datasets(args):
     """
     Build train/val/test datasets.
 
-    Since only vp1 pose data is available, we filter labels to vp1 entries.
-    We use the full label file and create our own 70/15/15 split among vp1 samples.
+    Uses --label_csv and optionally filters to --classes subset.
+    Performs a 70/15/15 random split among the matched samples.
     """
-    full_csv = os.path.join(LABEL_DIR, 'tasklevel.chunks_90.csv')
-
-    # Load all vp1 data
-    full_dataset = PoseDataset(full_csv, POSE_DIR, max_frames=args.max_frames, augment=False)
+    full_dataset = PoseDataset(
+        args.label_csv, POSE_DIR,
+        max_frames=args.max_frames, augment=False,
+        allowed_classes=args.classes,
+    )
     n_total = len(full_dataset)
 
     if n_total == 0:
-        raise RuntimeError("No vp1 samples found. Check data paths.")
+        raise RuntimeError("No samples found. Check --label_csv and --classes.")
 
     # Split: 70% train, 15% val, 15% test
     n_train = int(0.7 * n_total)
@@ -89,9 +94,8 @@ def build_datasets(args):
     # Create augmented wrapper for training
     train_dataset = AugmentedSubset(train_set, augment=True)
 
-    print(f"Dataset: {n_total} vp1 samples -> train={n_train}, val={n_val}, test={n_test}")
-    print(f"Number of classes: {NUM_CLASSES}")
-    return train_dataset, val_set, test_set
+    print(f"Dataset: {n_total} samples -> train={n_train}, val={n_val}, test={n_test}")
+    return train_dataset, val_set, test_set, full_dataset.activity_labels, full_dataset.num_classes
 
 
 class AugmentedSubset(torch.utils.data.Dataset):
@@ -200,7 +204,7 @@ def main():
         print(f"GPU Memory: {torch.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB")
 
     # Build datasets
-    train_set, val_set, test_set = build_datasets(args)
+    train_set, val_set, test_set, activity_labels, num_classes = build_datasets(args)
 
     pin = (device.type == 'cuda')
     nw = args.num_workers if device.type == 'cuda' else 0
@@ -211,9 +215,11 @@ def main():
     test_loader = DataLoader(test_set, batch_size=args.batch_size, shuffle=False,
                              num_workers=nw, pin_memory=pin)
 
+    print(f"Training {num_classes} classes: {activity_labels}")
+
     # Build model (official ST-GCN 9-layer architecture)
     model = STGCN(
-        num_classes=NUM_CLASSES,
+        num_classes=num_classes,
         in_channels=3,
         graph_strategy=args.graph_strategy,
         dropout=args.dropout,
@@ -299,7 +305,7 @@ def main():
 
     # Per-class report
     present_labels = sorted(set(test_labels))
-    target_names = [ACTIVITY_LABELS[i] for i in present_labels]
+    target_names = [activity_labels[i] for i in present_labels]
     report = classification_report(
         test_labels, test_preds,
         labels=present_labels,
@@ -309,9 +315,9 @@ def main():
     print(f"\nClassification Report:\n{report}")
 
     # Confusion matrix
-    cm = confusion_matrix(test_labels, test_preds, labels=list(range(NUM_CLASSES)))
+    cm = confusion_matrix(test_labels, test_preds, labels=list(range(num_classes)))
     print("Confusion Matrix:")
-    short_names = [n[:8] for n in ACTIVITY_LABELS]
+    short_names = [n[:8] for n in activity_labels]
     header = "         " + " ".join(f"{n:>8s}" for n in short_names)
     print(header)
     for i, row in enumerate(cm):
@@ -323,7 +329,7 @@ def main():
         'best_epoch': best_epoch,
         'test_metrics': test_metrics,
         'confusion_matrix': cm.tolist(),
-        'activity_labels': ACTIVITY_LABELS,
+        'activity_labels': activity_labels,
         'args': vars(args),
     }
     with open(os.path.join(OUTPUT_DIR, 'test_results.json'), 'w') as f:

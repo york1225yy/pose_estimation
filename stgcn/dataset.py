@@ -54,13 +54,16 @@ class PoseDataset(Dataset):
         label: int class index
     """
 
-    def __init__(self, label_csv, pose_dir, max_frames=90, augment=False):
+    def __init__(self, label_csv, pose_dir, max_frames=90, augment=False, allowed_classes=None):
         """
         Args:
             label_csv: path to activity label CSV (e.g., split_0.train.csv)
             pose_dir: path to directory containing openpose .3d.csv files
             max_frames: temporal window size (pad/crop to this length)
             augment: whether to apply data augmentation
+            allowed_classes: optional list of class name strings to keep;
+                             rows with other activities are discarded and
+                             labels are remapped to 0..len(allowed_classes)-1
         """
         self.pose_dir = pose_dir
         self.max_frames = max_frames
@@ -72,6 +75,18 @@ class PoseDataset(Dataset):
         file_id_map = _build_file_id_mapping(pose_dir, all_file_ids)
 
         labels_df = labels_df[labels_df['file_id'].isin(file_id_map)].reset_index(drop=True)
+
+        # Build class list & filter rows
+        if allowed_classes is not None:
+            labels_df = labels_df[labels_df['activity'].isin(allowed_classes)].reset_index(drop=True)
+            self.activity_labels = list(allowed_classes)
+        else:
+            self.activity_labels = sorted(labels_df['activity'].unique().tolist())
+        self.activity_to_idx = {name: idx for idx, name in enumerate(self.activity_labels)}
+        self.num_classes = len(self.activity_labels)
+
+        # Drop any stray rows whose activity is not in our label set
+        labels_df = labels_df[labels_df['activity'].isin(self.activity_to_idx)].reset_index(drop=True)
         self.samples = labels_df
 
         # Pre-load all available pose CSVs into memory (keyed by file_id)
@@ -90,6 +105,7 @@ class PoseDataset(Dataset):
         matched = labels_df['file_id'].isin(available_ids).sum()
         print(f"Pose data: {len(self.pose_data)} CSV file(s) loaded, "
               f"{matched} label rows matched ({len(self.samples)} samples total)")
+        print(f"Classes ({self.num_classes}): {self.activity_labels}")
 
         # Build column mapping: for each joint, find x, y, z column indices
         sample_df = next(iter(self.pose_data.values()))
@@ -112,7 +128,7 @@ class PoseDataset(Dataset):
         frame_start = int(row['frame_start'])
         frame_end = int(row['frame_end'])
         activity = row['activity']
-        label = ACTIVITY_TO_IDX[activity]
+        label = self.activity_to_idx[activity]
 
         # Extract skeleton frames
         df = self.pose_data[file_id]
