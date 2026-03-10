@@ -32,7 +32,10 @@ from sklearn.metrics import (
 )
 
 from stgcn.model import STGCN
+from stgcn.ctrgcn import CTRGCN
 from stgcn.dataset import PoseDataset
+
+MODEL_REGISTRY = {'stgcn': STGCN, 'ctrgcn': CTRGCN}
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 LABEL_DIR = os.path.join(BASE_DIR, 'activity_label')
@@ -46,8 +49,11 @@ OUTPUT_DIR = os.path.join(BASE_DIR, 'output')
 
 def parse_args():
     parser = argparse.ArgumentParser(description='ST-GCN Evaluation')
-    parser.add_argument('--model', type=str, default='output/best_model.pth',
-                        help='Path to model checkpoint (.pth)')
+    parser.add_argument('--arch', type=str, default='stgcn',
+                        choices=['stgcn', 'ctrgcn'],
+                        help='Model architecture (default: stgcn)')
+    parser.add_argument('--model', type=str, default=None,
+                        help='Path to checkpoint (.pth). Default: output/best_<arch>.pth')
     parser.add_argument('--split', type=str, default='test',
                         choices=['train', 'val', 'test', 'all'],
                         help='Which data split to evaluate (default: test)')
@@ -225,13 +231,20 @@ def main():
     if device.type == 'cuda':
         print(f"GPU   : {torch.cuda.get_device_name(0)}")
 
-    # Model
+    # Resolve checkpoint path
+    if args.model is None:
+        args.model = os.path.join('output', f'best_{args.arch}.pth')
     model_path = args.model if os.path.isabs(args.model) \
         else os.path.join(BASE_DIR, args.model)
     if not os.path.exists(model_path):
         raise FileNotFoundError(f"Checkpoint not found: {model_path}")
 
-    model = STGCN(
+    # Data splits (needed for num_classes before building model)
+    splits, activity_labels, num_classes = build_splits(args)
+
+    # Build & load model
+    ModelClass = MODEL_REGISTRY[args.arch]
+    model = ModelClass(
         num_classes=num_classes,
         in_channels=3,
         graph_strategy=args.graph_strategy,
@@ -239,11 +252,9 @@ def main():
     model.load_state_dict(
         torch.load(model_path, map_location=device, weights_only=True)
     )
+    print(f"Arch   : {args.arch.upper()}")
     print(f"Loaded : {model_path}")
     print(f"Params : {sum(p.numel() for p in model.parameters()):,}")
-
-    # Data splits
-    splits, activity_labels, num_classes = build_splits(args)
 
     # Which splits to evaluate
     eval_splits = ['train', 'val', 'test'] if args.split == 'all' else [args.split]

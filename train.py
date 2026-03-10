@@ -21,7 +21,10 @@ from sklearn.metrics import (
 )
 
 from stgcn.model import STGCN
+from stgcn.ctrgcn import CTRGCN
 from stgcn.dataset import PoseDataset
+
+MODEL_REGISTRY = {'stgcn': STGCN, 'ctrgcn': CTRGCN}
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 POSE_DIR = os.path.join(BASE_DIR, 'pose_all')
@@ -30,6 +33,9 @@ OUTPUT_DIR = os.path.join(BASE_DIR, 'output')
 
 def parse_args():
     parser = argparse.ArgumentParser(description='ST-GCN Skeleton Action Recognition')
+    parser.add_argument('--arch', type=str, default='stgcn',
+                        choices=['stgcn', 'ctrgcn'],
+                        help='Model architecture to train (default: stgcn)')
     parser.add_argument('--label_csv', type=str,
                         default=os.path.join(BASE_DIR, 'activity_label', 'tasklevel.chunks_90.csv'),
                         help='Path to activity label CSV file')
@@ -217,13 +223,15 @@ def main():
 
     print(f"Training {num_classes} classes: {activity_labels}")
 
-    # Build model (official ST-GCN 9-layer architecture)
-    model = STGCN(
+    # Build model
+    ModelClass = MODEL_REGISTRY[args.arch]
+    model = ModelClass(
         num_classes=num_classes,
         in_channels=3,
         graph_strategy=args.graph_strategy,
         dropout=args.dropout,
     ).to(device)
+    print(f"Architecture: {args.arch.upper()}: ", end='')
 
     total_params = sum(p.numel() for p in model.parameters())
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -245,7 +253,7 @@ def main():
     history = []
 
     print(f"\n{'='*70}")
-    print(f"Starting training: {args.epochs} epochs, lr={args.lr}, batch_size={args.batch_size}")
+    print(f"Starting training [{args.arch.upper()}]: {args.epochs} epochs, lr={args.lr}, batch_size={args.batch_size}")
     print(f"Graph strategy: {args.graph_strategy}, dropout: {args.dropout}")
     print(f"{'='*70}\n")
 
@@ -277,14 +285,14 @@ def main():
         if val_metrics['f1_macro'] > best_val_f1:
             best_val_f1 = val_metrics['f1_macro']
             best_epoch = epoch
-            torch.save(model.state_dict(), os.path.join(OUTPUT_DIR, 'best_model.pth'))
+            torch.save(model.state_dict(), os.path.join(OUTPUT_DIR, f'best_{args.arch}.pth'))
             print(f"  >> New best model saved (F1={best_val_f1:.4f})")
 
         print()
 
     # Save last model and training history
-    torch.save(model.state_dict(), os.path.join(OUTPUT_DIR, 'last_model.pth'))
-    with open(os.path.join(OUTPUT_DIR, 'training_history.json'), 'w') as f:
+    torch.save(model.state_dict(), os.path.join(OUTPUT_DIR, f'last_{args.arch}.pth'))
+    with open(os.path.join(OUTPUT_DIR, f'history_{args.arch}.json'), 'w') as f:
         json.dump(history, f, indent=2)
 
     # =========================================================================
@@ -294,7 +302,7 @@ def main():
     print(f"Final Evaluation (best model from epoch {best_epoch})")
     print(f"{'='*70}\n")
 
-    model.load_state_dict(torch.load(os.path.join(OUTPUT_DIR, 'best_model.pth'),
+    model.load_state_dict(torch.load(os.path.join(OUTPUT_DIR, f'best_{args.arch}.pth'),
                                      map_location=device, weights_only=True))
     test_metrics, test_preds, test_labels = evaluate(model, test_loader, criterion, device)
 
@@ -332,7 +340,7 @@ def main():
         'activity_labels': activity_labels,
         'args': vars(args),
     }
-    with open(os.path.join(OUTPUT_DIR, 'test_results.json'), 'w') as f:
+    with open(os.path.join(OUTPUT_DIR, f'results_{args.arch}.json'), 'w') as f:
         json.dump(results, f, indent=2)
 
     print(f"\nResults saved to {OUTPUT_DIR}/")
