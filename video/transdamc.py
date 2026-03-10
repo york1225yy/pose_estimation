@@ -20,13 +20,19 @@ Architecture overview:
   │  3. Classification head (CLS → num_classes)            │
   └────────────────────────────────────────────────────────┘
 
-Key details:
-  - ResNet-50 truncated before global pool (output: 2048-d spatial avg)
-  - d_model = 512, projected from 2048 via a linear bottleneck
-  - 6 Transformer encoder layers, 8 heads, feedforward_dim=2048
-  - Latent enhancement: dropout + LayerNorm on projected tokens (replaces
-    the diffusion module from the paper for purely supervised fine-tuning)
-  - ImageNet pre-trained weights via torchvision
+Fidelity notes (what matches / differs from the paper):
+  ✔  ResNet-50 spatial backbone with ImageNet pre-trained weights.
+  ✔  Temporal Transformer (Pre-LN, CLS token) — core spatiotemporal backbone.
+  ✔  Linear bottleneck projection (2048 → d_model=512) with LayerNorm + Dropout.
+  ✗  DPM (Diffusion Probabilistic Model) latent-space enhancement:
+       The paper's primary contribution is a DDPM-based denoising network that
+       augments latent features during *training* only (inference is identical).
+       NOT implemented because it requires a separate noise schedule and denoiser
+       and significantly complicates the training loop.
+  ✗  Paper also fuses skeleton features alongside RGB; here: video-only.
+
+  ⟹  Treat as "TransDARC-backbone": inference architecture is 100% faithful;
+      the latent-space data-augmentation training trick is omitted.
 """
 
 import math

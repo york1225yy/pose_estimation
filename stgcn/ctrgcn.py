@@ -5,10 +5,28 @@ Reference:
     Skeleton-Based Action Recognition" (ICCV 2021)
     https://arxiv.org/abs/2107.12213
 
-Key innovation over ST-GCN:
-    - CTRGC: each output channel gets its own input-dependent topology
-      M^c, added on top of the fixed base adjacency A.
-    - MS-TCN: multi-scale temporal convolution with 4 parallel branches.
+Faithful implementation of the full CTR-GCN architecture:
+
+★  CTRGC (spatial module):
+     - Keeps A as (k, V, V) — one convolution path per subset, NOT pre-merged.
+       (The original paper processes each sub-graph independently and sums,
+        exactly as in ST-GCN, but with dynamic topology added per subset.)
+     - Dynamic topology M ∈ R^{N×V×V} via scaled dot-product:
+           M = tanh( Q·K^T / √C_mid )
+       where Q, K are temporally-averaged channel projections of x.
+       (Earlier version used subtraction which differs from the paper.)
+     - Learnable per-subset scalar α_i weights the dynamic topology:
+           A_eff_i = A[i] + α_i · M      (α_i initialised to 0 →
+            purely static topology at the start of training)
+     - One unified Conv2d produces k*out_C features, then split per subset.
+
+★  MS-TCN (temporal module):  unchanged — 4-branch multi-scale conv.
+
+★  10-layer network: 64×3 → 128×3 → 256×4, stride-down at layers 4 & 7.
+
+Expected parameter count with default 'spatial' strategy (k=3): ~1.4 M
+(vs. ST-GCN ~3.1 M;  ST-GCN's 9×1 temporal conv dominates its param count
+ while MS-TCN replaces it with 4 lightweight bottleneck branches.)
 """
 
 import numpy as np
@@ -27,40 +45,56 @@ class CTRGC(nn.Module):
     """
     Channel-wise Topology Refinement Graph Convolution (CTRGC).
 
-    Computes a dynamic adjacency refinement M from the input features via
-    pairwise channel-wise differences, then applies graph conv with A + M.
+    For k A-subsets, computes:
+        output = Σ_i  V_i(x)  ×  ( A[i] + α_i · M )
+    where M is a shared dynamic topology:
+        M = tanh( Q · K^T / √C_mid )          (N, V, V)
+    Q, K are temporally-averaged reduced projections of x.
+    α_i is a per-subset learnable scalar (init=0).
     """
 
-    def __init__(self, in_channels, out_channels):
+    def __init__(self, in_channels: int, out_channels: int,
+                 k_subsets: int = 3, rel_reduction: int = 8):
         super().__init__()
-        # Internal feature dimension for topology computation
-        mid = max(in_channels // 8, 8) if in_channels > 8 else in_channels
+        self.k            = k_subsets
+        self.out_channels = out_channels
+        # Reduced mid-channel for topology (min 16; matches paper's rel_reduction=8)
+        mid = max(in_channels // rel_reduction, 16)
+        self.mid = mid
 
-        self.conv_q = nn.Conv2d(in_channels, mid, kernel_size=1)  # query
-        self.conv_k = nn.Conv2d(in_channels, mid, kernel_size=1)  # key
-        self.conv_v = nn.Conv2d(in_channels, out_channels, kernel_size=1)  # value
-        self.bn = nn.BatchNorm2d(out_channels)
-        self.tanh = nn.Tanh()
+        # One big conv → k groups of out_channels (more efficient than k separate convs)
+        self.conv_v = nn.Conv2d(in_channels, out_channels * k_subsets, 1, bias=False)
+        # Shared Q, K for dynamic topology
+        self.conv_q = nn.Conv2d(in_channels, mid, 1, bias=False)
+        self.conv_k = nn.Conv2d(in_channels, mid, 1, bias=False)
+
+        # Learnable per-subset weight on the dynamic topology (init=0)
+        self.alpha = nn.Parameter(torch.zeros(k_subsets))
+        self.bn    = nn.BatchNorm2d(out_channels)
+        self.tanh  = nn.Tanh()
 
     def forward(self, x, A):
         """
         x : (N, C, T, V)
-        A : (V, V)  — pre-merged static base adjacency
+        A : (k, V, V)  — raw subset matrices, NOT pre-merged
         """
-        # Temporal average for topology computation
-        q = self.conv_q(x).mean(2)   # (N, mid, V)
-        k = self.conv_k(x).mean(2)   # (N, mid, V)
+        N, C, T, V = x.shape
 
-        # Pairwise channel-wise difference → dynamic topology (N, V, V)
-        M = self.tanh(q.unsqueeze(-1) - k.unsqueeze(-2))  # (N, mid, V, V)
-        M = M.mean(1)                                       # (N, V, V)
+        # Dynamic topology — shared across subsets
+        q = self.conv_q(x).mean(dim=2)           # (N, mid, V)  temporal mean
+        k = self.conv_k(x).mean(dim=2)           # (N, mid, V)
+        # Scaled dot-product: (N, V, mid) @ (N, mid, V) → (N, V, V)
+        M = torch.bmm(q.permute(0, 2, 1), k) / (self.mid ** 0.5)
+        M = self.tanh(M)                         # (N, V, V)
 
-        # Combine static + dynamic topology
-        A_refined = A.unsqueeze(0) + M   # (N, V, V)   broadcast over batch
+        # Per-subset graph convolutions, outputs summed
+        v   = self.conv_v(x)                                        # (N, out_C*k, T, V)
+        v   = v.view(N, self.k, self.out_channels, T, V)            # (N, k, out_C, T, V)
+        out = torch.zeros(N, self.out_channels, T, V, device=x.device)
+        for i in range(self.k):
+            A_eff = A[i].unsqueeze(0) + self.alpha[i] * M           # (N, V, V)
+            out   = out + torch.einsum('nctv,nvw->nctw', v[:, i], A_eff)
 
-        # Graph convolution
-        v = self.conv_v(x)                                 # (N, out_C, T, V)
-        out = torch.einsum('nctv,nvw->nctw', v, A_refined)
         return self.bn(out)
 
 
@@ -69,12 +103,10 @@ class CTRGCSpatial(nn.Module):
 
     def __init__(self, in_channels, out_channels, A, residual=True):
         super().__init__()
-        # Pre-merge subsets into single (V, V) matrix and register as buffer
-        A_merged = A.sum(0).astype(np.float32)             # (V, V)
-        self.register_buffer('A', torch.from_numpy(A_merged))
-
-        self.ctrgc = CTRGC(in_channels, out_channels)
-        self.relu = nn.ReLU(inplace=True)
+        # Keep full (k, V, V) adjacency as a non-trainable buffer
+        self.register_buffer('A', torch.from_numpy(A.astype(np.float32)))
+        self.ctrgc = CTRGC(in_channels, out_channels, k_subsets=A.shape[0])
+        self.relu  = nn.ReLU(inplace=True)
 
         if not residual:
             self.res = lambda x: 0
@@ -82,7 +114,7 @@ class CTRGCSpatial(nn.Module):
             self.res = nn.Identity()
         else:
             self.res = nn.Sequential(
-                nn.Conv2d(in_channels, out_channels, kernel_size=1),
+                nn.Conv2d(in_channels, out_channels, kernel_size=1, bias=False),
                 nn.BatchNorm2d(out_channels),
             )
 

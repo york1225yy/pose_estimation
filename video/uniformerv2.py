@@ -22,12 +22,21 @@ Architecture overview:
   │  4. Classification head (global CLS → num_classes)          │
   └─────────────────────────────────────────────────────────────┘
 
-Implementation notes:
-  - Spatial backbone initialised from ViT-B/16 ImageNet weights
-    (torchvision ViT_B_16_Weights.IMAGENET1K_V1).
-  - Only the global temporal blocks are added from scratch.
-  - This closely follows the UniFormerV2 paper's "local" + "global"
-    design without requiring external pretrained video weights.
+Fidelity notes (what matches / differs from the paper):
+  ✔  ViT-B/16 spatial backbone with ImageNet pre-trained weights;
+     positional embedding interpolated for arbitrary input resolutions.
+  ✔  Global temporal blocks with Pre-LN MHSA + FFN + DW-Conv temporal bias
+     (the MDPA component from the paper, implemented as grouped Conv1d).
+  ✗  Paper's global attention uses *query-based cross-attention*:
+       learnable global query tokens attend to ALL patch tokens across frames.
+       Here we use self-attention over T CLS tokens only (lower memory,
+       reasonable approximation but loses patch-level spatial detail in
+       temporal reasoning).
+  ✗  Uses ImageNet-1K ViT weights; paper uses CLIP or ImageNet-21K.
+  ✗  No multi-scale temporal sampling (paper uses 8+16 frame inputs).
+
+  ⟹  Treat as "UniFormerV2-CLS": spatial ViT processing is identical;
+      global temporal reasoning is simplified to CLS-token attention.
 """
 
 import torch
