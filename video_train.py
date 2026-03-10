@@ -1,28 +1,27 @@
 """
 Video-based Action Recognition — Training Script
 
-Supports TransDARC and UniFormerV2, using the same label CSVs
-as the skeleton-based pipeline, but reads video clips instead.
+Trains TransDARC (ICRA 2023) on video clips, using the same label CSVs
+as the skeleton-based pipeline.
+
+TransDARC trains with a Diffusion Probabilistic Model (DDPM) auxiliary loss
+that augments latent-space features during training to improve generalisation.
+At inference only the clean backbone + classifier is used.
 
 Usage:
-    # TransDARC with 5-class midlevel subset
+    # TransDARC with 5-class tasklevel subset
     python video_train.py \\
-        --arch transdarc \\
-        --label_csv activity_label_2/midlevel.chunks_90.csv \\
+        --label_csv activity_label/tasklevel.chunks_90.csv \\
         --classes sitting_still eating fetching_an_object placing_an_object reading_magazine \\
         --epochs 30 --lr 1e-4 --batch_size 8
 
-    # UniFormerV2
-    python video_train.py \\
-        --arch uniformerv2 \\
-        --label_csv activity_label_2/midlevel.chunks_90.csv \\
-        --classes sitting_still eating fetching_an_object placing_an_object reading_magazine \\
-        --epochs 30 --lr 1e-4 --batch_size 4
+    # Without ImageNet pretrain; stronger DPM weight
+    python video_train.py --no_pretrained --dpm_weight 2.0
 
-Checkpoints are saved to:  output/best_<arch>.pth
-                            output/last_<arch>.pth
-Results JSON:               output/results_<arch>.json
-History JSON:               output/history_<arch>.json
+Checkpoints are saved to:  output/best_transdarc.pth
+                            output/last_transdarc.pth
+Results JSON:               output/results_transdarc.json
+History JSON:               output/history_transdarc.json
 """
 
 import argparse
@@ -40,15 +39,13 @@ from sklearn.metrics import (
 
 from video.dataset import VideoDataset
 from video.transdamc import TransDARC
-from video.uniformerv2 import UniFormerV2
 
 BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
 VIDEO_DIR  = os.path.join(BASE_DIR, 'video_data')
 OUTPUT_DIR = os.path.join(BASE_DIR, 'output')
 
 MODEL_REGISTRY = {
-    'transdarc':   TransDARC,
-    'uniformerv2': UniFormerV2,
+    'transdarc': TransDARC,
 }
 
 DEFAULT_LABEL_CSV = os.path.join(BASE_DIR, 'activity_label', 'tasklevel.chunks_90.csv')
@@ -63,7 +60,7 @@ DEFAULT_5_CLASSES = [
 # ---------------------------------------------------------------------------
 
 def parse_args():
-    parser = argparse.ArgumentParser(description='Video Action Recognition Training')
+    parser = argparse.ArgumentParser(description='Video Action Recognition Training (TransDARC)')
     parser.add_argument('--arch', type=str, default='transdarc',
                         choices=list(MODEL_REGISTRY.keys()),
                         help='Model architecture (default: transdarc)')
@@ -83,6 +80,8 @@ def parse_args():
                         help='Learning rate (default: 1e-4, AdamW)')
     parser.add_argument('--weight_decay', type=float, default=1e-4)
     parser.add_argument('--dropout', type=float, default=0.1)
+    parser.add_argument('--dpm_weight', type=float, default=1.0,
+                        help='Weight of DDPM auxiliary loss (default: 1.0; 0 = disable)')
     parser.add_argument('--freeze_backbone', action='store_true',
                         help='Freeze pre-trained spatial backbone weights')
     parser.add_argument('--no_pretrained', action='store_true',
@@ -165,15 +164,19 @@ class AugmentedVideoSubset(torch.utils.data.Dataset):
 # Training / evaluation
 # ---------------------------------------------------------------------------
 
-def train_one_epoch(model, loader, criterion, optimizer, device):
+def train_one_epoch(model, loader, criterion, optimizer, device, dpm_weight=1.0):
     model.train()
     total_loss, correct, total = 0.0, 0, 0
     for clips, labels in loader:
         clips  = clips.to(device, non_blocking=True)
         labels = labels.to(device, non_blocking=True)
         optimizer.zero_grad()
-        logits = model(clips)
-        loss   = criterion(logits, labels)
+        if dpm_weight > 0 and hasattr(model, 'forward_train'):
+            logits, dpm_loss = model.forward_train(clips)
+            loss = criterion(logits, labels) + dpm_weight * dpm_loss
+        else:
+            logits = model(clips)
+            loss   = criterion(logits, labels)
         loss.backward()
         optimizer.step()
         total_loss += loss.item() * labels.size(0)
@@ -282,7 +285,7 @@ def main():
 
     for epoch in range(1, args.epochs + 1):
         t0 = time.time()
-        train_loss, train_acc = train_one_epoch(model, train_loader, criterion, optimizer, device)
+        train_loss, train_acc = train_one_epoch(model, train_loader, criterion, optimizer, device, args.dpm_weight)
         val_metrics, _, _     = evaluate(model, val_loader, criterion, device)
         scheduler.step()
 

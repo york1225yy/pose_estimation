@@ -1,25 +1,24 @@
 """
 Video-based Action Recognition — Evaluation Script
 
-Loads a saved checkpoint and computes full metrics on any split.
+Loads a saved TransDARC checkpoint and computes full metrics on any split.
 Reproduces the exact same 70/15/15 random split used in video_train.py.
 
 Usage:
     # Evaluate best_transdarc.pth on test set
-    python video_evaluate.py --arch transdarc
+    python video_evaluate.py
 
-    # Evaluate UniFormerV2 on val set
-    python video_evaluate.py --arch uniformerv2 --split val
+    # Evaluate on val set
+    python video_evaluate.py --split val
 
     # Custom checkpoint / data
     python video_evaluate.py \\
-        --arch transdarc \\
         --model output/best_transdarc.pth \\
-        --label_csv activity_label_2/midlevel.chunks_90.csv \\
+        --label_csv activity_label/tasklevel.chunks_90.csv \\
         --classes sitting_still eating fetching_an_object placing_an_object reading_magazine
 
     # Evaluate on all splits
-    python video_evaluate.py --arch uniformerv2 --split all --save
+    python video_evaluate.py --split all --save
 """
 
 import argparse
@@ -36,15 +35,13 @@ from sklearn.metrics import (
 
 from video.dataset import VideoDataset
 from video.transdamc import TransDARC
-from video.uniformerv2 import UniFormerV2
 
 BASE_DIR   = os.path.dirname(os.path.abspath(__file__))
 VIDEO_DIR  = os.path.join(BASE_DIR, 'video_data')
 OUTPUT_DIR = os.path.join(BASE_DIR, 'output')
 
 MODEL_REGISTRY = {
-    'transdarc':   TransDARC,
-    'uniformerv2': UniFormerV2,
+    'transdarc': TransDARC,
 }
 
 DEFAULT_LABEL_CSV = os.path.join(BASE_DIR, 'activity_label', 'tasklevel.chunks_90.csv')
@@ -59,7 +56,7 @@ DEFAULT_5_CLASSES = [
 # ---------------------------------------------------------------------------
 
 def parse_args():
-    parser = argparse.ArgumentParser(description='Video Action Recognition Evaluation')
+    parser = argparse.ArgumentParser(description='Video Action Recognition Evaluation (TransDARC)')
     parser.add_argument('--arch', type=str, default='transdarc',
                         choices=list(MODEL_REGISTRY.keys()),
                         help='Model architecture (default: transdarc)')
