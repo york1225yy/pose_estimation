@@ -232,8 +232,11 @@ def main():
     if fp16_cfg is not None:
         wrap_fp16_model(model)
 
-    print(f"[模型] 加载权重: {args.checkpoint}")
-    load_checkpoint(model, args.checkpoint, map_location='cpu')
+    ckpt_path = osp.abspath(args.checkpoint)
+    if not osp.exists(ckpt_path):
+        raise FileNotFoundError(f"找不到权重文件: {ckpt_path}")
+    print(f"[模型] 加载权重: {ckpt_path}")
+    load_checkpoint(model, ckpt_path, map_location='cpu')
 
     if args.fuse_conv_bn:
         model = fuse_conv_bn(model)
@@ -311,7 +314,7 @@ def main():
     # ---------- 保存结果 ----------
     eval_results = {
         'split': args.split,
-        'checkpoint': args.checkpoint,
+        'checkpoint': ckpt_path,
         'num_samples': int(len(dataset)),
         'num_classes': num_classes,
         'class_names': class_names,
