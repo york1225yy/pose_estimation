@@ -234,7 +234,28 @@ def main():
 
     ckpt_path = osp.abspath(args.checkpoint)
     if not osp.exists(ckpt_path):
-        raise FileNotFoundError(f"找不到权重文件: {ckpt_path}")
+        # 回退1：相对于配置文件所在目录查找（适合 work_dirs 在 Video-Swin-Transformer/ 下的情形）
+        cfg_dir = osp.dirname(osp.abspath(args.config))
+        # 向上找到 Video-Swin-Transformer 根目录（config 在 configs/ 下面，根目录在上两级）
+        swin_root = osp.abspath(osp.join(cfg_dir, '..', '..', '..'))
+        candidate = osp.join(swin_root, args.checkpoint)
+        if osp.exists(candidate):
+            ckpt_path = candidate
+        else:
+            # 回退2：相对于脚本目录的上一级（Video-Swin-Transformer 根目录）
+            script_root = osp.abspath(osp.join(osp.dirname(__file__), '..'))
+            candidate2 = osp.join(script_root, args.checkpoint)
+            if osp.exists(candidate2):
+                ckpt_path = candidate2
+            else:
+                raise FileNotFoundError(
+                    f"找不到权重文件，已尝试以下路径：\n"
+                    f"  1. {osp.abspath(args.checkpoint)}\n"
+                    f"  2. {candidate}\n"
+                    f"  3. {candidate2}\n"
+                    f"请确认权重文件路径，例如:\n"
+                    f"  Video-Swin-Transformer/work_dirs/swin_base_drive_activity/best_top1_acc_epoch_23.pth"
+                )
     print(f"[模型] 加载权重: {ckpt_path}")
     load_checkpoint(model, ckpt_path, map_location='cpu')
 
