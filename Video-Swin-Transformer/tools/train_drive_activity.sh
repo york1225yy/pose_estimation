@@ -32,7 +32,7 @@ if [ "$GPUS" -eq 1 ]; then
 else
     echo "[INFO] ${GPUS} GPU 分布式训练..."
     PORT=${PORT:-29500}
-    python -m torch.distributed.launch \
+    torchrun \
         --nproc_per_node="$GPUS" \
         --master_port="$PORT" \
         tools/train.py \
