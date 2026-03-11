@@ -1,0 +1,32 @@
+# 视频和大型二进制文件（不提交到 GitHub，在 AutoDL 上单独上传）
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.pth
+*.pkl
+
+# 模型权重、检查点
+pretrained/
+work_dirs/
+checkpoints/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+*.so
+
+# 调试 / 临时文件
+*.log
+*.tmp
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# 数据生成中间结果
+data/annotations/
