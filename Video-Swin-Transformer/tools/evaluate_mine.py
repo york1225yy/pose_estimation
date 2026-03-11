@@ -7,12 +7,18 @@ Video Swin Transformer 扩展评估脚本。
 
 用法示例::
 
-    # 评估验证集（默认）
+    # 评估验证集（默认，需要 data/annotations/val.csv 已存在）
     python tools/evaluate_mine.py \\
         configs/recognition/swin/swin_base_drive_activity.py \\
         work_dirs/swin_base_drive_activity/best_top1_acc.pth
 
-    # 指定评估测试集
+    # 直接指定标注 CSV（无需提前运行 prepare_annotations.py）
+    python tools/evaluate_mine.py \\
+        configs/recognition/swin/swin_base_drive_activity.py \\
+        work_dirs/swin_base_drive_activity/best_top1_acc.pth \\
+        --ann-file data/activity_label/midlevel.chunks_90.csv
+
+    # 指定评估 test 集
     python tools/evaluate_mine.py \\
         configs/recognition/swin/swin_base_drive_activity.py \\
         work_dirs/swin_base_drive_activity/best_top1_acc.pth \\
@@ -111,6 +117,12 @@ def parse_args():
         default=[1, 3],
         help='Top-K 准确率的 K 值（默认: 1 3）',
     )
+    parser.add_argument(
+        '--ann-file',
+        default=None,
+        help='直接覆盖配置中的标注 CSV 路径（绝对路径或相对于 CWD）。'
+             '可传入原始 midlevel.chunks_90.csv，无需提前运行 prepare_annotations.py。',
+    )
     args = parser.parse_args()
     return args
 
@@ -173,11 +185,30 @@ def main():
     # ---------- 选择数据集划分 ----------
     if args.split == 'val':
         dataset_cfg = cfg.data.val
-        print(f"[数据集] 使用验证集: {cfg.data.val.ann_file}")
     else:
         dataset_cfg = cfg.data.test
-        print(f"[数据集] 使用测试集: {cfg.data.test.ann_file}")
 
+    # 允许通过 --ann-file 覆盖配置中的标注文件路径
+    if args.ann_file is not None:
+        dataset_cfg.ann_file = osp.abspath(args.ann_file)
+
+    # 若 ann_file 是相对路径，尝试相对于配置文件目录解析
+    if not osp.isabs(dataset_cfg.ann_file) and not osp.exists(dataset_cfg.ann_file):
+        cfg_dir = osp.dirname(osp.abspath(args.config))
+        candidate = osp.join(cfg_dir, dataset_cfg.ann_file)
+        if osp.exists(candidate):
+            dataset_cfg.ann_file = candidate
+
+    # 若仍然找不到，报清晰的错误
+    if not osp.exists(dataset_cfg.ann_file):
+        raise FileNotFoundError(
+            f"找不到标注文件: {dataset_cfg.ann_file}\n"
+            "请通过 --ann-file 指定路径，例如:\n"
+            "  --ann-file data/activity_label/midlevel.chunks_90.csv\n"
+            "或先运行: python tools/data/drive_activity/prepare_annotations.py"
+        )
+
+    print(f"[数据集] 使用{'验证' if args.split == 'val' else '测试'}集: {dataset_cfg.ann_file}")
     dataset_cfg.test_mode = True
     dataset = build_dataset(dataset_cfg)
 
