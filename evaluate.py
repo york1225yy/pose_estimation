@@ -25,7 +25,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader, Subset
 from sklearn.metrics import (
     accuracy_score, precision_score, recall_score, f1_score,
     confusion_matrix, classification_report,
@@ -76,28 +76,39 @@ def parse_args():
     return parser.parse_args()
 
 
+# Video Swin official participant split
+_TRAIN_VPS   = {1, 2, 3, 4, 5, 6, 7, 10, 11, 12, 13, 15}
+_VALTEST_VPS = {8, 9, 14}
+
+
 # ---------------------------------------------------------------------------
 # Data
 # ---------------------------------------------------------------------------
 
 def build_splits(args):
-    """Reproduce the exact same 70/15/15 random split used in train.py."""
+    """Reproduce the exact same participant-based split used in train.py."""
     full_dataset = PoseDataset(
         args.label_csv, args.pose_dir,
         max_frames=args.max_frames, augment=False,
         allowed_classes=args.classes,
     )
     n_total = len(full_dataset)
-    n_train = int(0.7 * n_total)
-    n_val   = int(0.15 * n_total)
-    n_test  = n_total - n_train - n_val
 
-    train_set, val_set, test_set = random_split(
-        full_dataset,
-        [n_train, n_val, n_test],
-        generator=torch.Generator().manual_seed(args.seed),
-    )
-    print(f"Dataset: {n_total} samples  →  train={n_train}, val={n_val}, test={n_test}")
+    pids = full_dataset.samples['participant_id'].astype(int).values
+    train_idx   = [i for i, p in enumerate(pids) if p in _TRAIN_VPS]
+    valtest_idx = [i for i, p in enumerate(pids) if p in _VALTEST_VPS]
+    mid      = len(valtest_idx) // 2
+    val_idx  = valtest_idx[:mid]
+    test_idx = valtest_idx[mid:]
+
+    train_set = Subset(full_dataset, train_idx)
+    val_set   = Subset(full_dataset, val_idx)
+    test_set  = Subset(full_dataset, test_idx)
+
+    print(f"Dataset: {n_total} samples → "
+          f"train={len(train_idx)} (vp {sorted(_TRAIN_VPS)}), "
+          f"val={len(val_idx)}, test={len(test_idx)} "
+          f"(vp {sorted(_VALTEST_VPS)})")
     return {'train': train_set, 'val': val_set, 'test': test_set}, full_dataset.activity_labels, full_dataset.num_classes
 
 

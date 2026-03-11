@@ -14,7 +14,7 @@ import json
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader, Subset
 from sklearn.metrics import (
     accuracy_score, precision_score, recall_score, f1_score,
     confusion_matrix, classification_report
@@ -69,12 +69,18 @@ def set_seed(seed):
         torch.backends.cudnn.benchmark = True
 
 
+# Video Swin official participant split
+_TRAIN_VPS = {1, 2, 3, 4, 5, 6, 7, 10, 11, 12, 13, 15}
+_VALTEST_VPS = {8, 9, 14}
+
+
 def build_datasets(args):
     """
-    Build train/val/test datasets.
+    Build train/val/test datasets using the official Video Swin participant split.
 
-    Uses --label_csv and optionally filters to --classes subset.
-    Performs a 70/15/15 random split among the matched samples.
+    Train : vp 1,2,3,4,5,6,7,10,11,12,13,15
+    Val   : vp 8,9,14  (first half by index)
+    Test  : vp 8,9,14  (second half by index)
     """
     full_dataset = PoseDataset(
         args.label_csv, POSE_DIR,
@@ -86,21 +92,23 @@ def build_datasets(args):
     if n_total == 0:
         raise RuntimeError("No samples found. Check --label_csv and --classes.")
 
-    # Split: 70% train, 15% val, 15% test
-    n_train = int(0.7 * n_total)
-    n_val = int(0.15 * n_total)
-    n_test = n_total - n_train - n_val
+    pids = full_dataset.samples['participant_id'].astype(int).values
+    train_idx   = [i for i, p in enumerate(pids) if p in _TRAIN_VPS]
+    valtest_idx = [i for i, p in enumerate(pids) if p in _VALTEST_VPS]
 
-    train_set, val_set, test_set = random_split(
-        full_dataset,
-        [n_train, n_val, n_test],
-        generator=torch.Generator().manual_seed(args.seed)
-    )
+    # Split val/test 50-50 within the held-out participants
+    mid = len(valtest_idx) // 2
+    val_idx  = valtest_idx[:mid]
+    test_idx = valtest_idx[mid:]
 
-    # Create augmented wrapper for training
-    train_dataset = AugmentedSubset(train_set, augment=True)
+    train_dataset = AugmentedSubset(Subset(full_dataset, train_idx), augment=True)
+    val_set   = Subset(full_dataset, val_idx)
+    test_set  = Subset(full_dataset, test_idx)
 
-    print(f"Dataset: {n_total} samples -> train={n_train}, val={n_val}, test={n_test}")
+    print(f"Dataset: {n_total} samples → "
+          f"train={len(train_idx)} (vp {sorted(_TRAIN_VPS)}), "
+          f"val={len(val_idx)}, test={len(test_idx)} "
+          f"(vp {sorted(_VALTEST_VPS)})")
     return train_dataset, val_set, test_set, full_dataset.activity_labels, full_dataset.num_classes
 
 
@@ -119,6 +127,11 @@ class AugmentedSubset(torch.utils.data.Dataset):
         if self.augment:
             skeleton = self._augment(skeleton)
         return skeleton, label
+
+    # keep the indices attribute so callers can inspect the split
+    @property
+    def indices(self):
+        return self.subset.indices
 
     def _augment(self, skeleton):
         """skeleton: (C=3, T, V) tensor"""
