@@ -147,6 +147,15 @@ def parse_args():
         action='store_true',
         help='推理时使用 FP16 半精度（加速约 30%%，显存减半）',
     )
+    parser.add_argument(
+        '--participants',
+        type=int,
+        nargs='+',
+        default=None,
+        help='只评估指定 participant_id 的样本。'
+             '例如 --participants 8 9 14 表示只评估验证集参与者（与训练验证一致）。'
+             '不指定则使用全部参与者。',
+    )
     args = parser.parse_args()
     return args
 
@@ -253,6 +262,26 @@ def main():
         )
 
     print(f"[数据集] 使用{'验证' if args.split == 'val' else '测试'}集: {dataset_cfg.ann_file}")
+
+    # 若指定了 --participants，将 CSV 过滤并写入临时文件，全程无需安装 pandas
+    if args.participants is not None:
+        import csv, tempfile, os as _os
+        pids = set(args.participants)
+        tmp = tempfile.NamedTemporaryFile(
+            mode='w', suffix='.csv', delete=False, newline='')
+        with open(dataset_cfg.ann_file, newline='') as fin:
+            reader = csv.DictReader(fin)
+            writer = csv.DictWriter(tmp, fieldnames=reader.fieldnames)
+            writer.writeheader()
+            kept = 0
+            for row in reader:
+                if int(row['participant_id']) in pids:
+                    writer.writerow(row)
+                    kept += 1
+        tmp.close()
+        print(f"[过滤] participant_id ∈ {sorted(pids)}，保留 {kept} 条样本（共 {kept} / 全部）")
+        dataset_cfg.ann_file = tmp.name
+
     dataset_cfg.test_mode = True
     dataset = build_dataset(dataset_cfg)
 
