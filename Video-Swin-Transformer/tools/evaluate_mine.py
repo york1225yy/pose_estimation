@@ -204,6 +204,16 @@ def main():
         else:
             cfg.test_cfg.average_clips = args.average_clips
 
+    # max_testing_views 要求 DataLoader batch_size==1（它内部自己做 batch 分割）
+    # val/test pipeline 只有 num_clips=1，无需此限制，batch_size>1 时直接移除
+    if args.batch_size > 1:
+        if cfg.model.get('test_cfg') is not None and \
+                'max_testing_views' in cfg.model.test_cfg:
+            cfg.model.test_cfg.pop('max_testing_views')
+        if cfg.get('test_cfg') is not None and \
+                'max_testing_views' in cfg.test_cfg:
+            cfg.test_cfg.pop('max_testing_views')
+
     cfg.setdefault('module_hooks', [])
 
     # ---------- 选择数据集划分 ----------
