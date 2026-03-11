@@ -139,11 +139,13 @@ optimizer = dict(
     ),
 )
 
+# GradientCumulativeFp16OptimizerHook：同时支持梯度累积 + fp16 混合精度
+# 等效 batch_size = videos_per_gpu × cumulative_iters = 4 × 2 = 8
 optimizer_config = dict(
+    type='GradientCumulativeFp16OptimizerHook',
     grad_clip=dict(max_norm=5, norm_type=2),
-    # 梯度累积 × 2，等效 batch_size = videos_per_gpu × 2 = 8
-    # 如内存充裕可注释掉 cumulative_iters
     cumulative_iters=2,
+    loss_scale='dynamic',
 )
 
 # 总训练 epoch
@@ -167,9 +169,6 @@ log_config = dict(
         dict(type='TensorboardLoggerHook'),
     ],
 )
-
-# 混合精度训练（节省显存，加速训练）
-fp16 = dict()
 
 work_dir = 'work_dirs/swin_base_drive_activity'
 
