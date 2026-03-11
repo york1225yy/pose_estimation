@@ -123,6 +123,12 @@ def parse_args():
         help='直接覆盖配置中的标注 CSV 路径（绝对路径或相对于 CWD）。'
              '可传入原始 midlevel.chunks_90.csv，无需提前运行 prepare_annotations.py。',
     )
+    parser.add_argument(
+        '--data-prefix',
+        default=None,
+        help='覆盖配置中的视频根目录（data_prefix）。'
+             '例如: --data-prefix /root/autodl-tmp/pose_estimation/data/video',
+    )
     args = parser.parse_args()
     return args
 
@@ -191,6 +197,16 @@ def main():
     # 允许通过 --ann-file 覆盖配置中的标注文件路径
     if args.ann_file is not None:
         dataset_cfg.ann_file = osp.abspath(args.ann_file)
+
+    # 允许通过 --data-prefix 覆盖视频根目录
+    if args.data_prefix is not None:
+        dataset_cfg.data_prefix = osp.abspath(args.data_prefix)
+    elif not osp.isabs(dataset_cfg.data_prefix) and not osp.exists(dataset_cfg.data_prefix):
+        # 自动尝试相对于仓库根目录解析 data_prefix
+        repo_root = osp.abspath(osp.join(osp.dirname(__file__), '..', '..'))
+        candidate_prefix = osp.join(repo_root, dataset_cfg.data_prefix)
+        if osp.exists(candidate_prefix):
+            dataset_cfg.data_prefix = candidate_prefix
 
     # 若 ann_file 是相对路径，尝试相对于配置文件目录解析
     if not osp.isabs(dataset_cfg.ann_file) and not osp.exists(dataset_cfg.ann_file):
