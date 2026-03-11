@@ -8,7 +8,8 @@ set -e
 
 CONFIG="configs/recognition/swin/swin_base_drive_activity.py"
 WORK_DIR="work_dirs/swin_base_drive_activity"
-GPUS=${GPUS:-1}
+GPUS=${GPUS:-$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | wc -l)}
+GPUS=${GPUS:-1}  # fallback to 1 if nvidia-smi unavailable
 
 # 支持断点续训：若存在 latest.pth 则自动恢复
 RESUME_CKPT=""
