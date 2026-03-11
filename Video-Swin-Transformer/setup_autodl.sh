@@ -39,17 +39,18 @@ info "检测到环境: PyTorch=${TORCH_VER}, CUDA=${CUDA_FULL} (tag=${CUDA_TAG})
 MMCV_INSTALLED=0
 
 # 策略 1：从 OpenMMLab 官方预编译源安装（避免源码编译，解决 THC/THC.h 问题）
+# 目标版本：mmcv-full==1.7.2（兼容 PyTorch 2.x，且与本项目版本检查匹配）
 if [ -n "$CUDA_TAG" ] && [ -n "$TORCH_VER" ]; then
     MMCV_URL="https://download.openmmlab.com/mmcv/dist/${CUDA_TAG}/torch${TORCH_VER}.0/index.html"
-    info "尝试从预编译源安装 mmcv-full: ${MMCV_URL}"
-    pip install "mmcv-full>=1.3.9,<1.8.0" -f "$MMCV_URL" -q && MMCV_INSTALLED=1 || true
+    info "尝试从预编译源安装 mmcv-full==1.7.2: ${MMCV_URL}"
+    pip install "mmcv-full==1.7.2" -f "$MMCV_URL" -q && MMCV_INSTALLED=1 || true
 fi
 
 # 策略 2：openmim 自动解析兼容版本
 if [ "$MMCV_INSTALLED" -eq 0 ]; then
     warn "策略1失败，尝试通过 openmim 安装..."
     pip install openmim -q
-    mim install "mmcv-full>=1.3.9,<1.8.0" -q && MMCV_INSTALLED=1 || true
+    mim install "mmcv-full==1.7.2" -q && MMCV_INSTALLED=1 || true
 fi
 
 # 策略 3：强制降级 PyTorch 为 1.13 + cu117（最后手段，会重新安装 torch）
