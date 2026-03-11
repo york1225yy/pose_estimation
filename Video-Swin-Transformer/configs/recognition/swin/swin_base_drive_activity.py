@@ -83,7 +83,7 @@ test_pipeline = [
 # ---------- DataLoader 设置（4090 24GB 优化） ----------
 # videos_per_gpu=4：Swin-B 32帧时约 18-20 GB，保留余量
 data = dict(
-    videos_per_gpu=4,
+    videos_per_gpu=2,
     workers_per_gpu=4,
     val_dataloader=dict(
         videos_per_gpu=1,
