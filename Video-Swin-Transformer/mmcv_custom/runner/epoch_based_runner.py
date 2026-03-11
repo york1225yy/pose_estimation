@@ -9,7 +9,6 @@ import torch
 
 import mmcv
 from .checkpoint import save_checkpoint
-import apex
 from torch.optim import Optimizer
 import os
 
@@ -112,6 +111,10 @@ class EpochBasedRunnerAmp(mmcv.runner.EpochBasedRunner):
                     f'but got {type(self.optimizer)}')
 
         if 'amp' in checkpoint and resume_amp:
+            try:
+                import apex
+            except ImportError:
+                raise ImportError('apex is required to resume AMP checkpoints.')
             apex.amp.load_state_dict(checkpoint['amp'])
             self.logger.info('load amp state dict')
 

@@ -1,5 +1,4 @@
 # Copyright (c) Open-MMLab. All rights reserved.
-import apex
 import os.path as osp
 import time
 from tempfile import TemporaryDirectory
@@ -50,6 +49,11 @@ def save_checkpoint(model, filename, optimizer=None, meta=None, amp=False):
 
     # save amp state dict in the checkpoint
     if amp:
+        try:
+            import apex
+        except ImportError:
+            raise ImportError('apex is required for AMP checkpoint saving. '
+                              'Install it or disable amp in config.')
         checkpoint['amp'] = apex.amp.state_dict()
 
     if filename.startswith('pavi://'):
