@@ -27,6 +27,7 @@ if [ "$GPUS" -eq 1 ]; then
         --work-dir "$WORK_DIR" \
         --seed 42 \
         --deterministic \
+        --validate \
         $RESUME_CKPT \
         2>&1 | tee "${WORK_DIR}/train.log"
 else
@@ -40,6 +41,7 @@ else
         --work-dir "$WORK_DIR" \
         --seed 42 \
         --deterministic \
+        --validate \
         --launcher pytorch \
         $RESUME_CKPT \
         2>&1 | tee "${WORK_DIR}/train.log"
