@@ -126,13 +126,9 @@ def build_datasets(args):
     train_idx   = [i for i, p in enumerate(pids) if p in _TRAIN_VPS]
     valtest_idx = [i for i, p in enumerate(pids) if p in _VALTEST_VPS]
 
-    mid      = len(valtest_idx) // 2
-    val_idx  = valtest_idx[:mid]
-    test_idx = valtest_idx[mid:]
-
     train_sub = Subset(full_dataset, train_idx)
-    val_set   = Subset(full_dataset, val_idx)
-    test_set  = Subset(full_dataset, test_idx)
+    val_set   = Subset(full_dataset, valtest_idx)
+    test_set  = Subset(full_dataset, valtest_idx)
 
     # Augmented wrapper for train split
     train_set = AugmentedVideoSubset(train_sub, full_dataset,
@@ -141,7 +137,7 @@ def build_datasets(args):
 
     print(f"Video clips: {n_total} total → "
           f"train={len(train_idx)} (vp {sorted(_TRAIN_VPS)}), "
-          f"val={len(val_idx)}, test={len(test_idx)} "
+          f"val=test={len(valtest_idx)} "
           f"(vp {sorted(_VALTEST_VPS)})")
     return train_set, val_set, test_set, full_dataset.activity_labels, full_dataset.num_classes
 
