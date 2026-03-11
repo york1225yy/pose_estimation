@@ -129,6 +129,24 @@ def parse_args():
         help='覆盖配置中的视频根目录（data_prefix）。'
              '例如: --data-prefix /root/autodl-tmp/pose_estimation/data/video',
     )
+    parser.add_argument(
+        '--batch-size',
+        type=int,
+        default=8,
+        help='推理 batch size，即每次送入 GPU 的视频片段数（默认: 8）。'
+             '根据 GPU 显存调整，RTX 4090 可设 16~32。',
+    )
+    parser.add_argument(
+        '--num-workers',
+        type=int,
+        default=4,
+        help='DataLoader 并行读取的 worker 数（默认: 4）',
+    )
+    parser.add_argument(
+        '--fp16',
+        action='store_true',
+        help='推理时使用 FP16 半精度（加速约 30%%，显存减半）',
+    )
     args = parser.parse_args()
     return args
 
@@ -228,14 +246,16 @@ def main():
     dataset_cfg.test_mode = True
     dataset = build_dataset(dataset_cfg)
 
-    # DataLoader：单张卡，batch_size=1 保证结果与 clip 数量对应
+    # DataLoader：batch_size 由 --batch-size 控制，默认 8
     dataloader_cfg = dict(
-        videos_per_gpu=1,
-        workers_per_gpu=2,
+        videos_per_gpu=args.batch_size,
+        workers_per_gpu=args.num_workers,
         dist=False,
         shuffle=False,
+        pin_memory=True,
     )
     data_loader = build_dataloader(dataset, **dataloader_cfg)
+    print(f"[DataLoader] batch_size={args.batch_size}, num_workers={args.num_workers}")
 
     # ---------- 构建模型 ----------
     turn_off_pretrained(cfg.model)
@@ -245,8 +265,9 @@ def main():
         register_module_hooks(model, cfg.module_hooks)
 
     fp16_cfg = cfg.get('fp16', None)
-    if fp16_cfg is not None:
+    if fp16_cfg is not None or args.fp16:
         wrap_fp16_model(model)
+        print("[模型] 已启用 FP16 半精度推理")
 
     ckpt_path = osp.abspath(args.checkpoint)
     if not osp.exists(ckpt_path):
@@ -281,7 +302,9 @@ def main():
     model = MMDataParallel(model, device_ids=[0])
 
     # ---------- 推理 ----------
-    print(f"\n[推理] 开始在 {args.split} 集上推理，共 {len(dataset)} 条样本...")
+    n_batches = (len(dataset) + args.batch_size - 1) // args.batch_size
+    print(f"\n[推理] 开始在 {args.split} 集上推理，共 {len(dataset)} 条样本"
+          f"，batch_size={args.batch_size}，共约 {n_batches} 个 batch...")
     outputs = single_gpu_test(model, data_loader)  # list of np.ndarray, shape (num_classes,)
 
     # ---------- 整理 GT 标签 ----------
