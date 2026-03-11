@@ -18,9 +18,62 @@ python -c "import torch; assert torch.cuda.is_available(), 'No GPU'" || error "�
 
 # ---------- 2. 安装依赖 ----------
 info "安装依赖..."
-pip install mmcv-full==1.3.9 -f https://download.openmmlab.com/mmcv/dist/cu118/torch2.0.0/index.html -q || \
-pip install mmcv-full -q
+
+# 先安装基础依赖（不含 mmcv）
 pip install decord pandas scikit-learn tensorboard -q
+
+# 检测 PyTorch 和 CUDA 版本以选择正确的预编译 mmcv-full
+TORCH_VER=$(python -c "import torch; print('.'.join(torch.__version__.split('.')[:2]))" 2>/dev/null)
+CUDA_FULL=$(python -c "import torch; print(torch.version.cuda)" 2>/dev/null)
+# 将 CUDA 版本格式转为 cuXXX，如 12.1 -> cu121，11.8 -> cu118
+CUDA_TAG=$(python -c "
+import torch, re
+v = torch.version.cuda           # e.g. '12.1', '11.8'
+major, minor = v.split('.')[:2]
+# 只取次版本号第一位：12.1 -> cu121, 11.8 -> cu118
+print('cu' + major + minor[0])
+" 2>/dev/null)
+
+info "检测到环境: PyTorch=${TORCH_VER}, CUDA=${CUDA_FULL} (tag=${CUDA_TAG})"
+
+MMCV_INSTALLED=0
+
+# 策略 1：从 OpenMMLab 官方预编译源安装（避免源码编译，解决 THC/THC.h 问题）
+if [ -n "$CUDA_TAG" ] && [ -n "$TORCH_VER" ]; then
+    MMCV_URL="https://download.openmmlab.com/mmcv/dist/${CUDA_TAG}/torch${TORCH_VER}.0/index.html"
+    info "尝试从预编译源安装 mmcv-full: ${MMCV_URL}"
+    pip install "mmcv-full>=1.3.9,<1.8.0" -f "$MMCV_URL" -q && MMCV_INSTALLED=1 || true
+fi
+
+# 策略 2：openmim 自动解析兼容版本
+if [ "$MMCV_INSTALLED" -eq 0 ]; then
+    warn "策略1失败，尝试通过 openmim 安装..."
+    pip install openmim -q
+    mim install "mmcv-full>=1.3.9,<1.8.0" -q && MMCV_INSTALLED=1 || true
+fi
+
+# 策略 3：强制降级 PyTorch 为 1.13 + cu117（最后手段，会重新安装 torch）
+if [ "$MMCV_INSTALLED" -eq 0 ]; then
+    warn "==================================================================="
+    warn "自动安装失败。请手动选择以下方案之一："
+    warn ""
+    warn "方案 A（推荐）：在 AutoDL 上选择 PyTorch ≤ 2.0 + CUDA 11.8 镜像，"
+    warn "  然后执行："
+    warn "  pip install mmcv-full -f https://download.openmmlab.com/mmcv/dist/cu118/torch2.0.0/index.html"
+    warn ""
+    warn "方案 B：使用 mim 安装："
+    warn "  pip install openmim && mim install 'mmcv-full>=1.3.9,<1.8.0'"
+    warn ""
+    warn "方案 C（CUDA 12.x + PyTorch 2.1+）："
+    warn "  pip install mmcv==2.1.0 -f https://download.openmmlab.com/mmcv/dist/cu121/torch2.1.0/index.html"
+    warn "  注：mmcv 2.x API 与本代码不完全兼容，需额外适配"
+    warn "==================================================================="
+    error "请手动安装 mmcv-full 后重新运行此脚本"
+fi
+
+info "mmcv-full 安装成功"
+
+# 安装本项目
 pip install -e . -q
 
 # ---------- 3. 数据目录结构检查 ----------
