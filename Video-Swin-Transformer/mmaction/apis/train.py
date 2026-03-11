@@ -111,6 +111,10 @@ def train_model(model,
             device_ids=[torch.cuda.current_device()],
             broadcast_buffers=False,
             find_unused_parameters=find_unused_parameters)
+        # Compatibility fix for PyTorch 2.x: _use_replicated_tensor_module
+        # is expected by mmcv's _run_ddp_forward but not always initialized
+        if not hasattr(model, '_use_replicated_tensor_module'):
+            model._use_replicated_tensor_module = False
     else:
         model = MMDataParallel(
             model.cuda(cfg.gpu_ids[0]), device_ids=cfg.gpu_ids)
