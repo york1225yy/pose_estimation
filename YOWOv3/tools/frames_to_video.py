@@ -25,6 +25,7 @@ import os
 import re
 from concurrent.futures import ProcessPoolExecutor, as_completed
 from pathlib import Path
+from typing import List, Optional, Tuple
 
 import cv2
 
@@ -34,7 +35,7 @@ def natural_sort_key(s: str):
     return [int(t) if t.isdigit() else t.lower() for t in re.split(r"(\d+)", s)]
 
 
-def frames_to_video(frames_dir: Path, output_path: Path, fps: float) -> tuple[str, bool, str]:
+def frames_to_video(frames_dir: Path, output_path: Path, fps: float) -> Tuple[str, bool, str]:
     """
     将单个 frames_dir 下的图片序列合并为 output_path 视频。
     返回 (video_name, success, message)。
@@ -73,7 +74,7 @@ def frames_to_video(frames_dir: Path, output_path: Path, fps: float) -> tuple[st
 
 
 def collect_tasks(data_root: Path, output_root: Path, fps: float,
-                  class_filter: str | None) -> list[tuple[Path, Path, float]]:
+                  class_filter: Optional[str]) -> List[Tuple[Path, Path, float]]:
     """
     遍历 data_root/rgb-images/<Class>/<Video>/ 生成任务列表。
     若不存在 rgb-images 子目录，则直接把 data_root 当作含多层子目录的根目录：
