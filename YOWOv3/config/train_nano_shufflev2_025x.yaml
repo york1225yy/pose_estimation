@@ -1,0 +1,184 @@
+# ============================================================
+# YOWOv3 训练配置：YOLOv8-nano + ShuffleNetV2-0.25x（最轻量）
+# 适用于：边缘设备训练 / CPU 推理
+#
+# 训练前需要：
+#   1. 下载 3D 骨干预训练权重（~6.6 MB）：
+#      https://huggingface.co/manh6054/YOWOv3/resolve/main/weights/backbone3D/shufflenetv2/kinetics_shufflenetv2_0.25x_RGB_16_best.pth
+#      → 放到 weights/backbone3D/shufflenetv2/ 目录
+#
+#   2. 下载 2D 骨干预训练权重（~12.2 MB）（若打算从 backbone 预训练开始）：
+#      https://huggingface.co/manh6054/YOWOv3/resolve/main/weights/backbone2D/YOLOv8/v8_n.pth
+#      → 放到 weights/backbone2D/YOLOv8/ 目录
+#
+#   3. 准备数据集，设置 data_root
+#
+# 训练命令：
+#   python main.py -m train -cf config/train_nano_shufflev2_025x.yaml
+#
+# 推理命令（训练完毕后）：
+#   python infer_video.py -cf config/train_nano_shufflev2_025x.yaml -v your_video.mp4
+# ============================================================
+
+BACKBONE2D:
+  YOLOv8:
+    ver : n    # nano，最小最快
+
+    PRETRAIN:
+      n : weights/backbone2D/YOLOv8/v8_n.pth
+      s : weights/backbone2D/YOLOv8/v8_s.pth
+      m : weights/backbone2D/YOLOv8/v8_m.pth
+      l : weights/backbone2D/YOLOv8/v8_l.pth
+      x : weights/backbone2D/YOLOv8/v8_x.pth
+
+BACKBONE3D:
+
+  MOBILENET:
+    width_mult: 2.0
+
+    PRETRAIN:
+      width_mult_0.5x  : weights/backbone3D/mobilenet/kinetics_mobilenet_0.5x_RGB_16_best.pth
+      width_mult_1.0x  : weights/backbone3D/mobilenet/kinetics_mobilenet_1.0x_RGB_16_best.pth
+      width_mult_1.5x  : weights/backbone3D/mobilenet/kinetics_mobilenet_1.5x_RGB_16_best.pth
+      width_mult_2.0x  : weights/backbone3D/mobilenet/kinetics_mobilenet_2.0x_RGB_16_best.pth
+
+  MOBILENETv2:
+    width_mult: 1.0
+
+    PRETRAIN:
+      width_mult_0.2x  : weights/backbone3D/mobilenetv2/kinetics_mobilenetv2_0.2x_RGB_16_best.pth
+      width_mult_0.45x : weights/backbone3D/mobilenetv2/kinetics_mobilenetv2_0.45x_RGB_16_best.pth
+      width_mult_0.7x  : weights/backbone3D/mobilenetv2/kinetics_mobilenetv2_0.7x_RGB_16_best.pth
+      width_mult_1.0x  : weights/backbone3D/mobilenetv2/kinetics_mobilenetv2_1.0x_RGB_16_best.pth
+
+  SHUFFLENET:
+    width_mult: 2.0
+
+    PRETRAIN:
+      width_mult_0.5x  : weights/backbone3D/shufflenet/kinetics_shufflenet_0.5x_G3_RGB_16_best.pth
+      width_mult_1.0x  : weights/backbone3D/shufflenet/kinetics_shufflenet_1.0x_G3_RGB_16_best.pth
+      width_mult_1.5x  : weights/backbone3D/shufflenet/kinetics_shufflenet_1.5x_G3_RGB_16_best.pth
+      width_mult_2.0x  : weights/backbone3D/shufflenet/kinetics_shufflenet_2.0x_G3_RGB_16_best.pth
+
+  SHUFFLENETv2:
+    width_mult: 0.25   # ← 关键：0.25x 最轻量版本
+
+    PRETRAIN:
+      width_mult_0.25x : weights/backbone3D/shufflenetv2/kinetics_shufflenetv2_0.25x_RGB_16_best.pth
+      width_mult_1.0x  : weights/backbone3D/shufflenetv2/kinetics_shufflenetv2_1.0x_RGB_16_best.pth
+      width_mult_1.5x  : weights/backbone3D/shufflenetv2/kinetics_shufflenetv2_1.5x_RGB_16_best.pth
+      width_mult_2.0x  : weights/backbone3D/shufflenetv2/kinetics_shufflenetv2_2.0x_RGB_16_best.pth
+
+  I3D:
+    PRETRAIN:
+      default: weights/backbone3D/I3D/rgb_imagenet.pth
+
+  RESNET:
+    ver : 101
+
+    PRETRAIN:
+      ver_18 : weights/backbone3D/resnet/kinetics_resnet_18_RGB_16_best.pth
+      ver_50 : weights/backbone3D/resnet/kinetics_resnet_50_RGB_16_best.pth
+      ver_101: weights/backbone3D/resnet/kinetics_resnet_101_RGB_16_best.pth
+
+  RESNEXT:
+    ver : 101
+
+    PRETRAIN:
+      ver_101 : weights/backbone3D/resnext/resnext-101-kinetics.pth
+
+LOSS:
+  TAL:
+    top_k  : 10
+    alpha  : 0.5
+    beta   : 6.0
+    radius : 2.5
+    soft_label : False
+
+    scale_cls_loss : 0.5
+    scale_box_loss : 7.5
+    scale_dfl_loss : 1.5
+
+  SIMOTA:
+    top_k  : 10
+    gamma  : 0.5
+    radius : 2.5
+    mode   : balance
+    soft_label : True
+
+    dynamic_k     : False
+    dynamic_top_k : 40
+
+    scale_cls_loss : 0.5
+    scale_box_loss : 7.5
+    scale_dfl_loss : 1.5
+
+  NORMAL:
+    top_k  : 10
+    radius : 2.5
+
+    dynamic_k     : True
+    dynamic_top_k : 10
+
+    scale_cls_loss : 1.0
+    scale_box_loss : 5.0
+    scale_dfl_loss : 1.0
+
+config_path       : config/train_nano_shufflev2_025x.yaml
+dataset           : ucf           # 使用自定义数据集请按 README Customization 一节修改
+loss              : tal
+active_checker    : True
+num_classes       : 24            # ← 若是自定义数据集，改为你的类别数
+backbone2D        : yolov8
+backbone3D        : shufflenetv2
+fusion_module     : CFAM
+mode              : decoupled
+interchannels     : [256, 256, 256]
+
+# pretrain_path 说明：
+#   - null        → 从随机初始化（backbone 仍会加载 Kinetics 预训练）
+#   - 设为 C23 路径 → 用 C23 checkpoint 做微调（推荐！可大幅减少收敛时间）
+#     但注意：C23 的 3D 骨干是 2.0x，权重形状不同，模型会自动忽略不匹配层
+#             并打印 WARNING，这是正常现象（相当于只继承 2D+head 部分）
+pretrain_path     : null
+
+data_root         : /path/to/ucf24   # ← 修改为你的数据集根目录
+img_size          : 224
+clip_length       : 16
+batch_size        : 8                # 轻量模型可适当调大，例如 16
+num_workers       : 4
+acc_grad          : 16
+lr                : 0.0001
+weight_decay      : 0.0005
+max_step_warmup   : 500
+adjustlr_schedule : [1, 2, 3, 4, 5]
+max_epoch         : 7
+lr_decay          : 0.5
+save_folder       : weights/nano_025x_checkpoint  # 输出目录
+sampling_rate     : 1
+
+idx2name:
+  0  : Baseketball
+  1  : BaseketballDunk
+  2  : Biking
+  3  : CliffDiving
+  4  : CricketBowling
+  5  : Diving
+  6  : Fencing
+  7  : FloorGymnastics
+  8  : GolfSwing
+  9  : HorseRiding
+  10 : IceDancing
+  11 : LongJump
+  12 : PoleVault
+  13 : RopeClimbing
+  14 : SalsaSpin
+  15 : SkateBoarding
+  16 : Skiing
+  17 : Skijet
+  18 : Soccer Juggling
+  19 : Surfing
+  20 : TennisSwing
+  21 : TrampolineJumping
+  22 : VolleyballSpiking
+  23 : WalkingWithDog
