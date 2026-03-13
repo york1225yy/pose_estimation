@@ -1,7 +1,7 @@
 import torch
 
 def load_checkpoint(path):
-    checkpoint_dict = torch.load(path)
+    checkpoint_dict = torch.load(path, weights_only=False)
     config          = checkpoint_dict['config']
     state_dict      = checkpoint_dict['state_dict']
     ema_state_dict  = checkpoint_dict['ema_state_dict']

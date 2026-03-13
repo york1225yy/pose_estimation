@@ -127,7 +127,7 @@ class YOWOv3(torch.nn.Module):
     
     def load_pretrain(self, pretrain_yowov3):
         state_dict = self.state_dict()
-        pretrain_state_dict = torch.load(pretrain_yowov3, weights_only=True)
+        pretrain_state_dict = torch.load(pretrain_yowov3, weights_only=False)
         flag = 0
         
         for param_name, value in pretrain_state_dict.items():
