@@ -156,7 +156,7 @@ download_if_missing \
 #     "weights/backbone3D/I3D/rgb_imagenet.pth"
 
 log_info "检查 C23/C27/C29/C30 模型权重..."
-for MODEL in C23 C27 C29 C30; do
+for MODEL in C23; do
     download_if_missing \
         "$BASE_HF_URL/checkpoint/ucf24/$MODEL/config.yaml" \
         "weights/checkpoint/$MODEL/config.yaml"
