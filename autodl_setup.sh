@@ -116,7 +116,7 @@ fi
 # =============================================================================
 log_section "步骤 3：验证权重文件"
 
-BASE_HF_URL="https://huggingface.co/manh6054/YOWOv3/resolve/main"
+BASE_HF_URL="https://huggingface.co/manh6054/YOWOv3/tree/main"
 
 download_if_missing() {
     local url="$1"
