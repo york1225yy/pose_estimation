@@ -33,8 +33,9 @@ def detect(config):
     model   = build_yowov3(config) 
     get_info(config, model)
     ##########################################################################
+    device  = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     mapping = config['idx2name']
-    model.to("cuda")
+    model.to(device)
     model.eval()
 
 
@@ -42,7 +43,7 @@ def detect(config):
         origin_image, clip, bboxes, labels = dataset.__getitem__(idx, get_origin_image=True)
         #print(bboxes)
 
-        clip = clip.unsqueeze(0).to("cuda")
+        clip = clip.unsqueeze(0).to(device)
         outputs = model(clip)
         outputs = non_max_suppression(outputs, conf_threshold=0.3, iou_threshold=0.5)[0]
 
