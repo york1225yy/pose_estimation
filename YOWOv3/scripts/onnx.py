@@ -1,7 +1,6 @@
 from model.TSN.YOWOv3 import build_yowov3
 from cus_datasets.build_dataset import build_dataset
 from utils.box import non_max_suppression
-import onnxruntime
 
 import torch
 from utils.box import draw_bounding_box
@@ -25,6 +24,7 @@ def export2onnx(config):
     
     mapping = config['idx2name']
     onnx_model_path = "yowov3.onnx"
+    import onnxruntime
     ort_session = onnxruntime.InferenceSession(onnx_model_path)
 
     dataset = build_dataset(config, phase='test')
