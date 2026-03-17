@@ -366,9 +366,9 @@ log_section "步骤 6：（可选）运行可视化检测"
 read -p "是否运行可视化检测（在数据集图像上绘制检测框）？[y/N] " -n 1 -r
 echo ""
 if [[ $REPLY =~ ^[Yy]$ ]]; then
-    log_info "运行 C23 检测可视化..."
+    log_info "运行 C23 检测可视化（结果将保存为图片，不弹窗）..."
     python main.py --mode detect --config config/ucf24_C23_eval.yaml
-    log_info "检测可视化完成，结果保存在当前目录"
+    log_info "检测完成，结果图片保存在：${PROJECT_DIR}/detect_output/"
 fi
 
 # =============================================================================

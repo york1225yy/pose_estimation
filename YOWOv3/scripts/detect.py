@@ -50,17 +50,12 @@ def detect(config):
 
         draw_bounding_box(origin_image, outputs[:, :4], outputs[:, 5], outputs[:, 4], mapping)
 
-        flag = 1 
-        if flag:
-            cv2.imshow('img', origin_image)
-            k = cv2.waitKey(100)
-            if k == ord('q'):
-                return
-        else:
-            cv2.imwrite(r"H:\detect_images\_" + str(idx) + r".jpg", origin_image)
-
-            print("ok")
-            print("image {} saved!".format(idx))
+        save_dir = "detect_output"
+        os.makedirs(save_dir, exist_ok=True)
+        save_path = os.path.join(save_dir, "{:05d}.jpg".format(idx))
+        cv2.imwrite(save_path, origin_image)
+        if idx % 100 == 0:
+            print("Saved {}/{}".format(idx + 1, dataset.__len__()))
 
 if __name__ == "__main__":
     config = build_config()
