@@ -26,7 +26,7 @@ GITHUB_BRANCH="yowov3"
 PROJECT_DIR="${REPO_DIR}/YOWOv3"
 
 # HuggingFace 镜像（如权重不在 GitHub 中、需从 HF 补充下载时使用，下载慢可取消注释）
-# export HF_ENDPOINT="https://hf-mirror.com"
+export HF_ENDPOINT="https://hf-mirror.com"
 # =========================================================================
 
 # 颜色输出
