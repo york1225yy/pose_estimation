@@ -118,25 +118,25 @@ log_section "步骤 3：验证权重文件"
 
 BASE_HF_URL="https://huggingface.co/manh6054/YOWOv3/tree/main"
 
-download_if_missing() {
-    local url="$1"
-    local dest="$2"
-    if [ -f "$dest" ]; then
-        local size
-        size=$(du -sh "$dest" | cut -f1)
-        log_info "  ✓ 已存在：$dest ($size)"
-    else
-        log_warn "  ✗ 缺失，从 HuggingFace 下载：$(basename "$dest") ..."
-        mkdir -p "$(dirname "$dest")"
-        wget -q --show-progress -c "$url" -O "$dest" || {
-            log_error "wget 下载失败，尝试 curl ..."
-            curl -L --progress-bar -o "$dest" "$url" || {
-                log_error "下载失败：$url"
-                log_warn "请手动下载并放置到 $dest"
-            }
-        }
-    fi
-}
+# download_if_missing() {
+#     local url="$1"
+#     local dest="$2"
+#     if [ -f "$dest" ]; then
+#         local size
+#         size=$(du -sh "$dest" | cut -f1)
+#         log_info "  ✓ 已存在：$dest ($size)"
+#     else
+#         log_warn "  ✗ 缺失，从 HuggingFace 下载：$(basename "$dest") ..."
+#         mkdir -p "$(dirname "$dest")"
+#         wget -q --show-progress -c "$url" -O "$dest" || {
+#             log_error "wget 下载失败，尝试 curl ..."
+#             curl -L --progress-bar -o "$dest" "$url" || {
+#                 log_error "下载失败：$url"
+#                 log_warn "请手动下载并放置到 $dest"
+#             }
+#         }
+#     fi
+# }
 
 log_info "检查骨干预训练权重..."
 download_if_missing \
@@ -145,15 +145,15 @@ download_if_missing \
 download_if_missing \
     "$BASE_HF_URL/weights/backbone3D/shufflenetv2/kinetics_shufflenetv2_2.0x_RGB_16_best.pth" \
     "weights/backbone3D/shufflenetv2/kinetics_shufflenetv2_2.0x_RGB_16_best.pth"
-download_if_missing \
-    "$BASE_HF_URL/weights/backbone3D/resnet/kinetics_resnet_101_RGB_16_best.pth" \
-    "weights/backbone3D/resnet/kinetics_resnet_101_RGB_16_best.pth"
-download_if_missing \
-    "$BASE_HF_URL/weights/backbone3D/resnext/resnext-101-kinetics.pth" \
-    "weights/backbone3D/resnext/resnext-101-kinetics.pth"
-download_if_missing \
-    "$BASE_HF_URL/weights/backbone3D/I3D/rgb_imagenet.pth" \
-    "weights/backbone3D/I3D/rgb_imagenet.pth"
+# download_if_missing \
+#     "$BASE_HF_URL/weights/backbone3D/resnet/kinetics_resnet_101_RGB_16_best.pth" \
+#     "weights/backbone3D/resnet/kinetics_resnet_101_RGB_16_best.pth"
+# download_if_missing \
+#     "$BASE_HF_URL/weights/backbone3D/resnext/resnext-101-kinetics.pth" \
+#     "weights/backbone3D/resnext/resnext-101-kinetics.pth"
+# download_if_missing \
+#     "$BASE_HF_URL/weights/backbone3D/I3D/rgb_imagenet.pth" \
+#     "weights/backbone3D/I3D/rgb_imagenet.pth"
 
 log_info "检查 C23/C27/C29/C30 模型权重..."
 for MODEL in C23 C27 C29 C30; do
