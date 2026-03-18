@@ -22,33 +22,5 @@ def export2onnx(config):
                     export_params=True)
     
     
-    mapping = config['idx2name']
-    onnx_model_path = "yowov3.onnx"
-    import onnxruntime
-    ort_session = onnxruntime.InferenceSession(onnx_model_path)
-
-    dataset = build_dataset(config, phase='test')
-
-    for idx in range(dataset.__len__()):
-        origin_image, clip, bboxes, labels = dataset.__getitem__(idx, get_origin_image=True)
-
-        clip = clip.unsqueeze(0)       
-
-        input_data = {ort_session.get_inputs()[0].name: clip.numpy()}
-        outputs = torch.tensor(ort_session.run(None, input_data))
-        #outputs = torch.from_numpy(outputs[0])
-        outputs = non_max_suppression(outputs[0], conf_threshold=0.3, iou_threshold=0.5)[0]
-        origin_image = cv2.resize(origin_image, (config['img_size'], config['img_size']))
-        draw_bounding_box(origin_image, outputs[:, :4], outputs[:, 5], outputs[:, 4], mapping)
-
-        flag = 1 
-        if flag:
-            cv2.imshow('img', origin_image)
-            k = cv2.waitKey(1)
-            if k == ord('q'):
-                return
-        else:
-            cv2.imwrite(r"H:\detect_images\_" + str(idx) + r".jpg", origin_image)
-
-            print("ok")
-            print("image {} saved!".format(idx))
+    print("ONNX export complete: {}".format(onnx_model_path))
+    print("To run inference, use export_onnx.py or onnxruntime directly.")
