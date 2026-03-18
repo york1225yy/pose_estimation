@@ -85,6 +85,7 @@ def export(weights: str, config_path: str, output: str, opset: int):
                 "clips":      {0: "batch_size"},
                 "detections": {0: "batch_size"},
             },
+            dynamo=False,
         )
 
     file_size = os.path.getsize(output) / 1024 / 1024
