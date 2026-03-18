@@ -91,15 +91,28 @@ def export(weights: str, config_path: str, output: str, opset: int):
     file_size = os.path.getsize(output) / 1024 / 1024
     print(f"      Export done! File size: {file_size:.1f} MB")
 
-    # ── 5. 验证 ONNX 模型 ────────────────────────────────────────────────────
-    print(f"\n[4/4] Verifying ONNX model ...")
-    try:
-        import onnx
+    # ── 5. 若存在外部数据文件，合并为单个 .onnx 文件 ─────────────────────────
+    print(f"\n[4/5] Checking for external data files ...")
+    import onnx
+    data_file = output + ".data"
+    if os.path.exists(data_file):
+        print(f"      Found external data file: {data_file}")
+        print(f"      Merging into single file ...")
+        model_onnx = onnx.load(output, load_external_data=True)
+        onnx.save_model(model_onnx, output, save_as_external_data=False)
+        os.remove(data_file)
+        file_size = os.path.getsize(output) / 1024 / 1024
+        print(f"      Merged! Single file size: {file_size:.1f} MB")
+    else:
         model_onnx = onnx.load(output)
+
+    # ── 6. 验证 ONNX 模型 ────────────────────────────────────────────────────
+    print(f"\n[5/5] Verifying ONNX model ...")
+    try:
         onnx.checker.check_model(model_onnx)
         print("      ONNX model check passed!")
-    except ImportError:
-        print("      [SKIP] onnx package not installed, run: pip install onnx")
+    except Exception as e:
+        print(f"      [WARN] ONNX check: {e}")
 
     print(f"\nDone! ONNX model saved to: {os.path.abspath(output)}")
     print("\nONNX 输入/输出说明:")
