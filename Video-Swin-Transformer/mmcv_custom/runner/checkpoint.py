@@ -1,8 +1,5 @@
 # Copyright (c) Open-MMLab. All rights reserved.
-try:
-    import apex
-except ImportError:
-    apex = None
+import apex
 import os.path as osp
 import time
 from tempfile import TemporaryDirectory

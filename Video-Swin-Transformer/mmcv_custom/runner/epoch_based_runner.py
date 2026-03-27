@@ -9,10 +9,7 @@ import torch
 
 import mmcv
 from .checkpoint import save_checkpoint
-try:
-    import apex
-except ImportError:
-    apex = None
+import apex
 from torch.optim import Optimizer
 import os
 
