@@ -1,0 +1,36 @@
+# 权重文件（体积过大，不上传）
+checkpoints/*.pth
+checkpoints/*.bin
+checkpoints/*.ckpt
+
+# Python 虚拟环境
+.venv/
+venv/
+env/
+
+# Python 缓存
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+
+# Jupyter
+.ipynb_checkpoints/
+
+# 编译产物
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 编辑器
+.idea/
+.vscode/
+*.swp
+*.swo
