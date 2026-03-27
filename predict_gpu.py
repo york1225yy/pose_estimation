@@ -162,96 +162,56 @@ def print_banner(args, actual_device: torch.device):
 def draw_results_on_frame(frame, results, top_k, elapsed, device_label="GPU"):
     """在帧上绘制 Top-K 识别结果、置信度条和推理耗时"""
     h, w = frame.shape[:2]
+    top_k = min(top_k, len(results))
+    panel_h = 40 + top_k * 34
 
-    # 半透明背景面板
+    # 半透明背景面板 —— 必须用返回值，不能原地写（aliasing 导致段错误）
     overlay = frame.copy()
-    panel_h = 36 + top_k * 34 + 40
     cv2.rectangle(overlay, (0, 0), (w, panel_h), (0, 0, 0), -1)
-    cv2.addWeighted(overlay, 0.55, frame, 0.45, 0, frame)
+    frame = cv2.addWeighted(overlay, 0.55, frame, 0.45, 0)
 
     # 标题行
-    title = f"Video Swin Transformer [{device_label}]  推理耗时: {elapsed:.2f}s"
-    cv2.putText(frame, title, (12, 24),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 1, cv2.LINE_AA)
+    title = f"[{device_label}]  {results[0][0]}  {results[0][1]:.4f}  耗时:{elapsed:.1f}s"
+    cv2.putText(frame, title, (10, 25),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 255, 255), 2, cv2.LINE_AA)
 
-    top_k = min(top_k, len(results))
     for rank, (label_name, score) in enumerate(results[:top_k]):
-        y_base = 52 + rank * 34
-        bar_max_w = int(w * 0.45)
-        bar_w = int(bar_max_w * min(score, 1.0))
-
-        # 颜色：第1名金色，其余蓝绿渐变
-        if rank == 0:
-            color = (0, 215, 255)
-        else:
-            g = max(80, 200 - rank * 30)
-            color = (0, g, 180)
-
-        # 置信度背景条（灰）
-        cv2.rectangle(frame, (12, y_base - 18), (12 + bar_max_w, y_base + 4),
-                      (60, 60, 60), -1)
-        # 置信度彩色条
+        y = 50 + rank * 34
+        bar_max = int(w * 0.5)
+        bar_w   = int(bar_max * min(score, 1.0))
+        color   = (0, 215, 255) if rank == 0 else (0, max(80, 200 - rank * 30), 180)
+        cv2.rectangle(frame, (10, y - 16), (10 + bar_max, y + 4), (50, 50, 50), -1)
         if bar_w > 0:
-            cv2.rectangle(frame, (12, y_base - 18), (12 + bar_w, y_base + 4),
-                          color, -1)
-
-        # 标签文字
-        text = f"#{rank+1} {label_name}  {score:.4f}"
-        cv2.putText(frame, text, (18 + bar_max_w + 8, y_base),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 1, cv2.LINE_AA)
-
+            cv2.rectangle(frame, (10, y - 16), (10 + bar_w, y + 4), color, -1)
+        cv2.putText(frame, f"#{rank+1} {label_name}  {score:.4f}",
+                    (16 + bar_max + 6, y),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1, cv2.LINE_AA)
     return frame
 
 
 def save_annotated_video(video_path, results, top_k, elapsed, output_path,
                          display=False, device_label="GPU"):
-    """读取原始视频，叠加识别结果后用 ffmpeg 编码写入新文件"""
-    import subprocess
-    import shutil
-
+    """用 cv2 读帧并绘制标注，用 cv2.VideoWriter 写入输出视频"""
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
-        print(f"[警告] 无法打开视频文件: {video_path}，跳过视频保存")
+        print(f"[错误] 无法打开视频: {video_path}")
         return
 
     fps    = cap.get(cv2.CAP_PROP_FPS) or 25.0
     width  = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     total  = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    top_k_clamped = min(top_k, len(results))
+    top_k_c = min(top_k, len(results))
 
-    print(f"[可视化] 正在生成标注视频: {output_path}")
-    print(f"  分辨率: {width}x{height}, FPS: {fps:.1f}, 总帧数: {total}")
+    print(f"[可视化] 输出: {output_path}  {width}x{height} @ {fps:.1f}fps  共{total}帧")
 
-    # 检查 ffmpeg 是否可用
-    if shutil.which("ffmpeg") is None:
-        print("[错误] 未找到 ffmpeg，请先安装: sudo apt install ffmpeg")
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    writer = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+    if not writer.isOpened():
+        print(f"[错误] 无法创建输出视频: {output_path}")
         cap.release()
         return
 
-    # 通过管道将 BGR 原始帧送入 ffmpeg，输出标准 H.264 MP4
-    ffmpeg_cmd = [
-        "ffmpeg", "-y",
-        "-f", "rawvideo",
-        "-vcodec", "rawvideo",
-        "-pix_fmt", "bgr24",
-        "-s", f"{width}x{height}",
-        "-r", str(fps),
-        "-i", "pipe:0",
-        "-vcodec", "libx264",
-        "-pix_fmt", "yuv420p",
-        "-crf", "23",
-        "-preset", "fast",
-        "-movflags", "+faststart",
-        output_path,
-    ]
-    proc = subprocess.Popen(
-        ffmpeg_cmd,
-        stdin=subprocess.PIPE,
-        stderr=subprocess.DEVNULL,
-    )
-
-    # 显示窗口初始化（必须在第一次 imshow 前调用）
     win_name = f"Video Swin Transformer — {device_label}"
     if display:
         cv2.namedWindow(win_name, cv2.WINDOW_NORMAL)
@@ -263,24 +223,22 @@ def save_annotated_video(video_path, results, top_k, elapsed, output_path,
             ret, frame = cap.read()
             if not ret:
                 break
-            frame = draw_results_on_frame(frame, results, top_k_clamped, elapsed, device_label)
-            proc.stdin.write(frame.tobytes())
+            frame = draw_results_on_frame(frame, results, top_k_c, elapsed, device_label)
+            writer.write(frame)
             if display:
                 cv2.imshow(win_name, frame)
-                # waitKey(1) 非阻塞刷新；按 q 退出
                 if cv2.waitKey(1) & 0xFF == ord("q"):
                     break
             frame_idx += 1
-            if frame_idx % 50 == 0:
-                print(f"  已处理: {frame_idx}/{total} 帧", end="\r")
+            if frame_idx % 30 == 0:
+                print(f"  进度: {frame_idx}/{total}", end="\r")
     finally:
         cap.release()
-        proc.stdin.close()
-        proc.wait()
+        writer.release()
         if display:
             cv2.destroyAllWindows()
 
-    print(f"\n  标注视频已保存至: {output_path}")
+    print(f"\n  已保存: {output_path}")
 
 
 def run_inference(args):
