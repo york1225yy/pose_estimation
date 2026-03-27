@@ -7,7 +7,8 @@ Video Swin Transformer — CPU 模式视频行为识别推理脚本
         --config Video-Swin-Transformer/configs/recognition/swin/swin_tiny_patch244_window877_kinetics400_1k.py \
         --checkpoint checkpoints/swin_tiny_patch244_window877_kinetics400_1k.pth \
         --label Video-Swin-Transformer/demo/label_map_k400.txt \
-        --top-k 5
+        --top-k 5 \
+        --output result_cpu.mp4
 """
 
 import argparse
@@ -15,6 +16,8 @@ import os
 import sys
 import time
 
+import cv2
+import numpy as np
 import torch
 
 
@@ -59,6 +62,18 @@ def parse_args():
         default=False,
         help="若视频路径为帧目录，请启用此选项",
     )
+    parser.add_argument(
+        "--output",
+        type=str,
+        default="result_cpu.mp4",
+        help="输出带标注的视频文件路径（默认: result_cpu.mp4）",
+    )
+    parser.add_argument(
+        "--display",
+        action="store_true",
+        default=False,
+        help="实时显示标注窗口（需要图形界面，默认关闭）",
+    )
     return parser.parse_args()
 
 
@@ -90,10 +105,98 @@ def load_labels(label_path):
 def print_banner(args):
     print("=" * 60)
     print("  Video Swin Transformer — CPU 推理")
-    print(f"  视频: {args.video}")
-    print(f"  设备: cpu")
+    print(f"  视频:   {args.video}")
+    print(f"  设备:   cpu")
+    print(f"  输出:   {args.output}")
+    print(f"  显示:   {'是' if args.display else '否'}")
     print("=" * 60)
     print()
+
+
+def draw_results_on_frame(frame, results, top_k, elapsed, device_label="CPU"):
+    """在帧上绘制 Top-K 识别结果、置信度条和推理耗时"""
+    h, w = frame.shape[:2]
+
+    # 半透明背景面板
+    overlay = frame.copy()
+    panel_h = 36 + top_k * 34 + 40
+    cv2.rectangle(overlay, (0, 0), (w, panel_h), (0, 0, 0), -1)
+    cv2.addWeighted(overlay, 0.55, frame, 0.45, 0, frame)
+
+    # 标题行
+    title = f"Video Swin Transformer [{device_label}]  推理耗时: {elapsed:.2f}s"
+    cv2.putText(frame, title, (12, 24),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 1, cv2.LINE_AA)
+
+    top_k = min(top_k, len(results))
+    for rank, (label_name, score) in enumerate(results[:top_k]):
+        y_base = 52 + rank * 34
+        bar_max_w = int(w * 0.45)
+        bar_w = int(bar_max_w * min(score, 1.0))
+
+        # 颜色：第1名金色，其余蓝绿渐变
+        if rank == 0:
+            color = (0, 215, 255)
+        else:
+            g = max(80, 200 - rank * 30)
+            color = (0, g, 180)
+
+        # 置信度背景条（灰）
+        cv2.rectangle(frame, (12, y_base - 18), (12 + bar_max_w, y_base + 4),
+                      (60, 60, 60), -1)
+        # 置信度彩色条
+        if bar_w > 0:
+            cv2.rectangle(frame, (12, y_base - 18), (12 + bar_w, y_base + 4),
+                          color, -1)
+
+        # 标签文字
+        text = f"#{rank+1} {label_name}  {score:.4f}"
+        cv2.putText(frame, text, (18 + bar_max_w + 8, y_base),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.55, color, 1, cv2.LINE_AA)
+
+    return frame
+
+
+def save_annotated_video(video_path, results, top_k, elapsed, output_path, display=False):
+    """读取原始视频，叠加识别结果后写入新文件"""
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        print(f"[警告] 无法打开视频文件: {video_path}，跳过视频保存")
+        return
+
+    fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
+    width  = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    total  = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+
+    print(f"[可视化] 正在生成标注视频: {output_path}")
+    print(f"  分辨率: {width}x{height}, FPS: {fps:.1f}, 总帧数: {total}")
+
+    top_k_clamped = min(top_k, len(results))
+    frame_idx = 0
+    while True:
+        ret, frame = cap.read()
+        if not ret:
+            break
+        frame = draw_results_on_frame(frame, results, top_k_clamped, elapsed, "CPU")
+        out.write(frame)
+        if display:
+            cv2.imshow("Video Swin Transformer — CPU", frame)
+            if cv2.waitKey(int(1000 / fps)) & 0xFF == ord("q"):
+                break
+        frame_idx += 1
+        if frame_idx % 50 == 0:
+            print(f"  已处理: {frame_idx}/{total} 帧", end="\r")
+
+    cap.release()
+    out.release()
+    if display:
+        cv2.destroyAllWindows()
+
+    print(f"\n  标注视频已保存至: {output_path}")
 
 
 def run_inference(args):
@@ -162,6 +265,19 @@ def run_inference(args):
     for i, (label_name, score) in enumerate(results[:top_k], 1):
         print(f"  #{i:<3} {label_name:<30} 得分: {score:>8.4f}")
     print()
+
+    # ── 可视化并保存 ──────────────────────────────────────────
+    if not args.use_frames:
+        save_annotated_video(
+            video_path=args.video,
+            results=results,
+            top_k=args.top_k,
+            elapsed=elapsed,
+            output_path=args.output,
+            display=args.display,
+        )
+    else:
+        print("[提示] 帧目录模式暂不支持视频保存，跳过。")
 
     return results
 
