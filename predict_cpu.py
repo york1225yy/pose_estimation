@@ -158,43 +158,80 @@ def draw_results_on_frame(frame, results, top_k, elapsed, device_label="CPU"):
 
 
 def save_annotated_video(video_path, results, top_k, elapsed, output_path, display=False):
-    """读取原始视频，叠加识别结果后写入新文件"""
+    """读取原始视频，叠加识别结果后用 ffmpeg 编码写入新文件"""
+    import subprocess
+    import shutil
+
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         print(f"[警告] 无法打开视频文件: {video_path}，跳过视频保存")
         return
 
-    fps = cap.get(cv2.CAP_PROP_FPS) or 25.0
+    fps    = cap.get(cv2.CAP_PROP_FPS) or 25.0
     width  = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     total  = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-
-    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-    out = cv2.VideoWriter(output_path, fourcc, fps, (width, height))
+    top_k_clamped = min(top_k, len(results))
 
     print(f"[可视化] 正在生成标注视频: {output_path}")
     print(f"  分辨率: {width}x{height}, FPS: {fps:.1f}, 总帧数: {total}")
 
-    top_k_clamped = min(top_k, len(results))
-    frame_idx = 0
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
-        frame = draw_results_on_frame(frame, results, top_k_clamped, elapsed, "CPU")
-        out.write(frame)
-        if display:
-            cv2.imshow("Video Swin Transformer — CPU", frame)
-            if cv2.waitKey(int(1000 / fps)) & 0xFF == ord("q"):
-                break
-        frame_idx += 1
-        if frame_idx % 50 == 0:
-            print(f"  已处理: {frame_idx}/{total} 帧", end="\r")
+    # 检查 ffmpeg 是否可用
+    if shutil.which("ffmpeg") is None:
+        print("[错误] 未找到 ffmpeg，请先安装: sudo apt install ffmpeg")
+        cap.release()
+        return
 
-    cap.release()
-    out.release()
+    # 通过管道将 BGR 原始帧送入 ffmpeg，输出标准 H.264 MP4
+    ffmpeg_cmd = [
+        "ffmpeg", "-y",
+        "-f", "rawvideo",
+        "-vcodec", "rawvideo",
+        "-pix_fmt", "bgr24",
+        "-s", f"{width}x{height}",
+        "-r", str(fps),
+        "-i", "pipe:0",
+        "-vcodec", "libx264",
+        "-pix_fmt", "yuv420p",
+        "-crf", "23",
+        "-preset", "fast",
+        "-movflags", "+faststart",
+        output_path,
+    ]
+    proc = subprocess.Popen(
+        ffmpeg_cmd,
+        stdin=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+    )
+
+    # 显示窗口初始化（必须在第一次 imshow 前调用）
+    win_name = "Video Swin Transformer — CPU"
     if display:
-        cv2.destroyAllWindows()
+        cv2.namedWindow(win_name, cv2.WINDOW_NORMAL)
+        cv2.resizeWindow(win_name, min(width, 1280), min(height, 720))
+
+    frame_idx = 0
+    try:
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+            frame = draw_results_on_frame(frame, results, top_k_clamped, elapsed, "CPU")
+            proc.stdin.write(frame.tobytes())
+            if display:
+                cv2.imshow(win_name, frame)
+                # waitKey(1) 非阻塞刷新；按 q 退出
+                if cv2.waitKey(1) & 0xFF == ord("q"):
+                    break
+            frame_idx += 1
+            if frame_idx % 50 == 0:
+                print(f"  已处理: {frame_idx}/{total} 帧", end="\r")
+    finally:
+        cap.release()
+        proc.stdin.close()
+        proc.wait()
+        if display:
+            cv2.destroyAllWindows()
 
     print(f"\n  标注视频已保存至: {output_path}")
 
