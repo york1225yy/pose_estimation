@@ -114,32 +114,16 @@ def print_banner(args):
 
 
 def draw_results_on_frame(frame, results, top_k, elapsed, device_label="CPU"):
-    """在帧上绘制 Top-K 识别结果、置信度条和推理耗时"""
-    h, w = frame.shape[:2]
+    """在帧左上角绘制 Top-K 识别文字"""
     top_k = min(top_k, len(results))
-    panel_h = 40 + top_k * 34
-
-    # 半透明背景面板 —— 必须用返回值，不能原地写（aliasing 导致段错误）
-    overlay = frame.copy()
-    cv2.rectangle(overlay, (0, 0), (w, panel_h), (0, 0, 0), -1)
-    frame = cv2.addWeighted(overlay, 0.55, frame, 0.45, 0)
-
-    # 标题行
-    title = f"[{device_label}]  {results[0][0]}  {results[0][1]:.4f}  耗时:{elapsed:.1f}s"
-    cv2.putText(frame, title, (10, 25),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 255, 255), 2, cv2.LINE_AA)
-
     for rank, (label_name, score) in enumerate(results[:top_k]):
-        y = 50 + rank * 34
-        bar_max = int(w * 0.5)
-        bar_w   = int(bar_max * min(score, 1.0))
-        color   = (0, 215, 255) if rank == 0 else (0, max(80, 200 - rank * 30), 180)
-        cv2.rectangle(frame, (10, y - 16), (10 + bar_max, y + 4), (50, 50, 50), -1)
-        if bar_w > 0:
-            cv2.rectangle(frame, (10, y - 16), (10 + bar_w, y + 4), color, -1)
-        cv2.putText(frame, f"#{rank+1} {label_name}  {score:.4f}",
-                    (16 + bar_max + 6, y),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1, cv2.LINE_AA)
+        text = f"#{rank+1} {label_name}  {score:.4f}"
+        y = 30 + rank * 30
+        # 黑色描边增强可读性
+        cv2.putText(frame, text, (10, y),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 0), 3, cv2.LINE_AA)
+        cv2.putText(frame, text, (10, y),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 1, cv2.LINE_AA)
     return frame
 
 
