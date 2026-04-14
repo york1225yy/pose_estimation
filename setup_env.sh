@@ -14,8 +14,12 @@ echo "[1/5] Python 版本: $PYTHON_VER (路径: $PYTHON)"
 
 # ── 升级 pip 及基础工具 ───────────────────────────────────────
 echo "[2/5] 升级 pip 及基础工具..."
-$PYTHON -m pip install --upgrade pip setuptools wheel -q
-# setuptools 提供 pkg_resources，Python 3.11+ 新环境中可能缺失
+# Python 3.11+ 某些发行版 pkg_resources 不内置，需同时在系统层和 pip 层安装
+# apt 安装确保系统 Python 有 pkg_resources（用于 pip 隔离构建环境内）
+if command -v apt-get &> /dev/null; then
+    apt-get install -y python3-setuptools python3-pkg-resources -q 2>/dev/null || true
+fi
+$PYTHON -m pip install --upgrade pip "setuptools>=68.0" wheel -q
 
 # ── 检测 CUDA 并安装 PyTorch ─────────────────────────────────
 echo "[3/5] 检测 CUDA 环境并安装 PyTorch..."
@@ -69,10 +73,14 @@ if [ "$TORCH_MAJOR" -ge 2 ]; then
         fi
     fi
 
-    # 3) 最终回退：直接 pip install（自动构建，需 CUDA toolkit）
+    # 3) 最终回退：MMCV_WITH_OPS=0 + --no-build-isolation 从源码编译
+    # MMCV_WITH_OPS=0：跳过 CUDA 自定义算子编译（Video Swin 推理不需要它）
+    # --no-build-isolation：禁止 pip 创建隔离构建环境，直接使用当前环境的
+    #   setuptools/pkg_resources，彻底解决 Python 3.11 pkg_resources 缺失问题
     if [ "$INSTALL_OK" -eq 0 ]; then
-        echo "      回退：pip install mmcv（可能从源码编译，请稍候）..."
-        $PYTHON -m pip install "mmcv>=2.0.0" -q
+        echo "      回退：MMCV_WITH_OPS=0 源码编译（跳过 CUDA 算子，请稍候）..."
+        MMCV_WITH_OPS=0 $PYTHON -m pip install "mmcv>=2.0.0,<2.2.0" \
+            --no-build-isolation -q
     fi
 else
     # PyTorch 1.x：使用旧版 mmcv-full 1.x
