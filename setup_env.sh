@@ -30,14 +30,56 @@ else
         --index-url https://download.pytorch.org/whl/cpu -q
 fi
 
-# ── 安装 mmcv-full ────────────────────────────────────────────
-echo "[4/5] 安装 mmcv-full..."
+# ── 安装 mmcv ────────────────────────────────────────────────
+echo "[4/5] 安装 mmcv..."
 TORCH_VER=$($PYTHON -c "import torch; print(torch.__version__.split('+')[0])")
-echo "      PyTorch 版本: $TORCH_VER"
+TORCH_MAJOR=$($PYTHON -c "import torch; print(torch.__version__.split('.')[0])")
+TORCH_MINOR=$($PYTHON -c "import torch; print(torch.__version__.split('.')[1])")
+echo "      PyTorch 版本: $TORCH_VER（主版本: $TORCH_MAJOR）"
+
 $PYTHON -m pip install openmim -q
-$PYTHON -m mim install "mmcv-full>=1.3.8,<1.6.0" -q || \
-    $PYTHON -m pip install mmcv-full \
-        -f https://download.openmmlab.com/mmcv/dist/cpu/torch${TORCH_VER}/index.html -q
+
+if [ "$TORCH_MAJOR" -ge 2 ]; then
+    # PyTorch 2.x：使用 mmcv 2.x（统一包，无需从源码编译 mmcv-full）
+    echo "      检测到 PyTorch 2.x，安装 mmcv 2.x + mmengine..."
+    $PYTHON -m pip install mmengine -q
+
+    # ---------- 尝试顺序：预编译 wheel → openmim → pip 直接安装 ----------
+    # 1) 尝试 OpenMMLab 官方预编译 wheel（cu118/torch2.x）
+    CUDA_TAG="cu118"
+    # 从 torch 2.0 到 2.4 有官方 wheel，2.5+ 可能没有，通配尝试
+    INSTALL_OK=0
+    for TRY_TORCH in "${TORCH_MAJOR}.${TORCH_MINOR}" "2.4" "2.3" "2.2" "2.1" "2.0"; do
+        WHEEL_URL="https://download.openmmlab.com/mmcv/dist/${CUDA_TAG}/torch${TRY_TORCH}/index.html"
+        echo "      尝试预编译 wheel (torch${TRY_TORCH})..."
+        if $PYTHON -m pip install "mmcv>=2.0.0" -f "${WHEEL_URL}" -q 2>/dev/null; then
+            INSTALL_OK=1
+            echo "      ✓ 从 wheel 安装成功（torch${TRY_TORCH} 兼容）"
+            break
+        fi
+    done
+
+    # 2) 若预编译 wheel 均失败，尝试 openmim
+    if [ "$INSTALL_OK" -eq 0 ]; then
+        echo "      预编译 wheel 未找到，尝试 mim install..."
+        if $PYTHON -m mim install "mmcv>=2.0.0" -q 2>/dev/null; then
+            INSTALL_OK=1
+            echo "      ✓ mim install 成功"
+        fi
+    fi
+
+    # 3) 最终回退：直接 pip install（自动构建，需 CUDA toolkit）
+    if [ "$INSTALL_OK" -eq 0 ]; then
+        echo "      回退：pip install mmcv（可能从源码编译，请稍候）..."
+        $PYTHON -m pip install "mmcv>=2.0.0" -q
+    fi
+else
+    # PyTorch 1.x：使用旧版 mmcv-full 1.x
+    echo "      检测到 PyTorch 1.x，安装 mmcv-full 1.x..."
+    $PYTHON -m mim install "mmcv-full>=1.3.8,<1.6.0" -q || \
+        $PYTHON -m pip install mmcv-full \
+            -f https://download.openmmlab.com/mmcv/dist/cpu/torch${TORCH_VER}/index.html -q
+fi
 
 # ── 安装项目依赖 ──────────────────────────────────────────────
 echo "[5/5] 安装 Video-Swin-Transformer 项目依赖..."

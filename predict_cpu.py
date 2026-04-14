@@ -186,7 +186,11 @@ def run_inference(args):
         sys.path.insert(0, vst_dir)
 
     try:
-        from mmcv import Config
+        # mmcv 2.x 将 Config 迁移至 mmengine，兼容两种写法
+        try:
+            from mmengine.config import Config
+        except ImportError:
+            from mmcv import Config
         from mmaction.apis import inference_recognizer, init_recognizer
     except ImportError as e:
         print(f"[错误] 依赖未安装: {e}")
