@@ -12,9 +12,10 @@ PYTHON=$(command -v python3 || command -v python)
 PYTHON_VER=$($PYTHON -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
 echo "[1/5] Python 版本: $PYTHON_VER (路径: $PYTHON)"
 
-# ── 升级 pip ─────────────────────────────────────────────────
-echo "[2/5] 升级 pip..."
-$PYTHON -m pip install --upgrade pip -q
+# ── 升级 pip 及基础工具 ───────────────────────────────────────
+echo "[2/5] 升级 pip 及基础工具..."
+$PYTHON -m pip install --upgrade pip setuptools wheel -q
+# setuptools 提供 pkg_resources，Python 3.11+ 新环境中可能缺失
 
 # ── 检测 CUDA 并安装 PyTorch ─────────────────────────────────
 echo "[3/5] 检测 CUDA 环境并安装 PyTorch..."
