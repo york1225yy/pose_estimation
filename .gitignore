@@ -1,0 +1,46 @@
+# ============================================================
+#  pose_estimation 仓库根目录 .gitignore
+# ============================================================
+
+# 模型权重文件（>100MB，不提交）
+*.pth
+*.pt
+*.ckpt
+*.bin
+*.safetensors
+
+# mmaction2 子目录内部已有 .gitignore，但在根目录也显式排除权重目录
+mmaction2/checkpoints/
+mmaction2/work_dirs/
+mmaction2/data/
+
+# Python 缓存
+__pycache__/
+*.py[cod]
+*.pyc
+*.pyo
+*.so
+
+# 构建产物
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# 日志 & 输出
+*.log
+*.log.json
+
+# Jupyter
+.ipynb_checkpoints/
+
+# 编辑器
+.vscode/
+.idea/
+.DS_Store
+
+# 环境
+.env
+.venv
+env/
+venv/
