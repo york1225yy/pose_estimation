@@ -181,10 +181,13 @@ mmaction2/
 
 | 软件 | 版本要求 |
 |------|---------|
-| Python | ≥ 3.7 |
-| PyTorch | ≥ 1.8 |
-| MMCV | ≥ 2.0.0 |
-| MMEngine | ≥ 0.6.0 |
+| Python | ≥ 3.7 | 3.8
+| PyTorch | ≥ 1.8 | 2.0.0
+| MMCV | ≥ 2.0.0 | 2.1.0
+| MMEngine | ≥ 0.6.0 | 0.10.7
+| MMAction2 | github download | 1.2.0
+| MMdet |         | 3.2.0
+| MMpose |         | 1.3.2
 
 ### 完整安装步骤
 
