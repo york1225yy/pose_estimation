@@ -91,9 +91,10 @@ def main():
     random.seed(args.seed)
 
     # 扫描类别子目录（按字母顺序排序，保证标签编号稳定）
+    # 过滤以 '.' 开头的隐藏目录（如 .ipynb_checkpoints）
     classes = sorted([
         d for d in os.listdir(video_root)
-        if os.path.isdir(os.path.join(video_root, d))
+        if os.path.isdir(os.path.join(video_root, d)) and not d.startswith('.')
     ])
 
     if not classes:
