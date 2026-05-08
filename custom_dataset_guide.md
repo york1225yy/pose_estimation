@@ -153,8 +153,28 @@ print(f"已保存至 {output_dir}/train.txt 和 val.txt")
 运行方式：
 ```bash
 cd /workspaces/pose_estimation/mmaction2
-python tools/data/build_custom_filelist.py
+
+# 基础用法（使用默认参数）
+python tools/data/build_custom_filelist.py \
+    --video-root data/my_dataset/videos \
+    --output-dir data/my_dataset \
+    --val-ratio 0.2 \
+    --seed 42
+
+# 参数说明:
+#   --video-root   视频根目录（下一级为各类别子目录）
+#   --output-dir   输出 train.txt / val.txt 的目录
+#   --val-ratio    验证集比例，默认 0.2（20%）
+#   --seed         随机种子，保证划分可复现
+#   --ext          支持的视频格式，默认 .mp4 .avi .mkv .mov .wmv
 ```
+
+脚本执行后会输出：
+- `data/my_dataset/train.txt` — 训练集标注文件
+- `data/my_dataset/val.txt` — 验证集标注文件
+- `data/my_dataset/annotations/label_map.txt` — 类别名称映射
+
+> **注意**: 脚本使用**分层划分**，保证每个类别在训练/验证集中的比例一致，避免某类别全部落入验证集的问题。
 
 **方法B: 手动编写**
 
